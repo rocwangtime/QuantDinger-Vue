@@ -341,8 +341,8 @@ export default {
         : (res.data && res.data.data) || res
       return {
         connected: !!payload.connected,
-        accountId: payload.account_id || payload.account || payload.login || null,
-        paper: payload.paper === true || payload.paper === 'true',
+        accountId: payload.acc_id || payload.account_id || payload.account || payload.login || null,
+        paper: payload.trade_env === 'demo' || payload.paper === true || payload.paper === 'true',
         baseUrl: payload.base_url || payload.baseUrl || '',
         host: payload.host || '',
         port: payload.port || null,

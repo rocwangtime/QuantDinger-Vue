@@ -76,6 +76,16 @@ export default {
           { key: 'account', label: this.$t('brokerAccounts.kpi.account'), value: String(i.account || i.AccountCode || '--') }
         ]
       }
+      if (this.brokerId === 'futu') {
+        const summary = i.summary || {}
+        return [
+          { key: 'assets', label: this.$t('brokerAccounts.kpi.equity'), value: money(summary.total_assets, summary.currency || 'USD') },
+          { key: 'cash', label: this.$t('brokerAccounts.kpi.cash'), value: money(summary.cash, summary.currency || 'USD') },
+          { key: 'power', label: this.$t('brokerAccounts.kpi.buyingPower'), value: money(summary.power, summary.currency || 'USD'), tone: 'accent' },
+          { key: 'account', label: this.$t('brokerAccounts.kpi.account'), value: String(i.account || '--') },
+          { key: 'environment', label: this.$t('futuPaper.environment'), value: 'SIMULATE' }
+        ]
+      }
       return []
     }
   },

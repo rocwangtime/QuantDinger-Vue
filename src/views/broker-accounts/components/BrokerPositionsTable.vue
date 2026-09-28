@@ -18,7 +18,7 @@
       :scroll="{ x: 720 }"
     >
       <template slot="pnl" slot-scope="text, record">
-        <span :class="pnlClass(record)">{{ formatMoney(firstValue(record.unrealized_pnl, record.unrealizedPnl, record.unrealizedPnL, record.profit)) }}</span>
+        <span :class="pnlClass(record)">{{ formatMoney(firstValue(record.unrealized_pnl, record.unrealized_pl, record.unrealizedPnl, record.unrealizedPnL, record.profit)) }}</span>
       </template>
       <template slot="qty" slot-scope="text, record">
         {{ formatQuantity(firstValue(record.quantity, record.qty, record.position)) }}
@@ -73,7 +73,7 @@ export default {
     formatPrice: brokerPrice,
     formatQuantity: brokerQuantity,
     pnlClass (record) {
-      const v = Number(firstValue(record.unrealized_pnl, record.unrealizedPnl, record.unrealizedPnL, record.profit))
+      const v = Number(firstValue(record.unrealized_pnl, record.unrealized_pl, record.unrealizedPnl, record.unrealizedPnL, record.profit))
       if (v > 0) return 'pnl-positive'
       if (v < 0) return 'pnl-negative'
       return ''

@@ -6,6 +6,7 @@ import enUS from './lang/en-US'
 import copilotOverrides from './copilot-overrides'
 import profileSecurityMessages from './lang/profile-security'
 import brokerAccountWorkspaceMessages from './lang/broker-account-workspace'
+import futuPaperMessages from './lang/futu-paper'
 import strategyV2Messages from './lang/strategy-v2'
 import fundamentalSyncMessages from './lang/fundamental-sync'
 import strategyLiveRiskMessages from './lang/strategy-live-risk'
@@ -38,6 +39,7 @@ const messages = {
     ...(copilotOverrides[defaultLang] || {}),
     ...(profileSecurityMessages[defaultLang] || {}),
     ...(brokerAccountWorkspaceMessages[defaultLang] || {}),
+    ...(futuPaperMessages[defaultLang] || {}),
     ...(strategyV2Messages[defaultLang] || {}),
     ...(fundamentalSyncMessages[defaultLang] || {}),
     ...(strategyLiveRiskMessages[defaultLang] || {}),
@@ -129,6 +131,7 @@ function mergeLocaleOverrides (lang) {
     ...(copilotOverrides[lang] || {}),
     ...(profileSecurityMessages[lang] || {}),
     ...(brokerAccountWorkspaceMessages[lang] || {}),
+    ...(futuPaperMessages[lang] || {}),
     ...(strategyV2Messages[lang] || {}),
     ...(fundamentalSyncMessages[lang] || {}),
     ...(strategyLiveRiskMessages[lang] || {}),

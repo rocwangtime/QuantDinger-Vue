@@ -22,6 +22,7 @@ export function brokerOrderStatusColor (status) {
 }
 
 export function brokerOrderCanCancel (record, brokerId = 'alpaca') {
+  if (brokerId === 'futu') return false
   if (!record || !record.id) return false
   const status = String(record.status || '').trim().toLowerCase()
   const statuses = brokerId === 'ibkr'
