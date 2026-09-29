@@ -115,10 +115,13 @@
           :refresh-version="refreshVersion"
           :status="connectionMap[selectedBroker.id]"
           :loading="loadingMap[selectedBroker.id]"
+          :automation-loading="futuAutomationLoading"
           :is-dark-theme="isDarkTheme"
           :cloud-blocked="isBrokerBlocked(selectedBroker.id)"
           @connect="payload => handleConnect(selectedBroker.id, payload)"
           @disconnect="() => handleDisconnect(selectedBroker.id)"
+          @futu-arm="handleFutuArm"
+          @futu-pause="handleFutuPause"
           @refresh="() => loadOne(selectedBroker.id)"
           @select-account="selectAlpacaAccount"
           @place-order="payload => handlePlaceOrder(selectedBroker.id, payload)"
@@ -171,6 +174,7 @@ export default {
       alpacaCredentialId: null,
       refreshVersion: 0,
       loadingMap: {},
+      futuAutomationLoading: false,
       requestVersions: {},
       cryptoCredentialItems: [],
       refreshing: false,
@@ -376,11 +380,36 @@ export default {
       try {
         await broker[id].disconnect(this.accountParams(id))
         this.$message.success(this.$t('brokerAccounts.disconnectSuccess'))
-        this.$set(this.connectionMap, id, { connected: false })
+        if (id === 'futu') await this.loadOne(id)
+        else this.$set(this.connectionMap, id, { connected: false })
       } catch (e) {
         this.$message.error((e && (e.error || e.message)) || this.$t('brokerAccounts.disconnectFailed'))
       } finally {
         this.$set(this.loadingMap, id, false)
+      }
+    },
+    async handleFutuArm (payload) {
+      this.futuAutomationLoading = true
+      try {
+        await broker.futu.armAutomation(payload)
+        this.$message.success(this.$t('futuPaper.armedSuccess'))
+      } catch (error) {
+        this.$message.error((error && error.message) || this.$t('futuPaper.armFailed'))
+      } finally {
+        await this.loadOne('futu')
+        this.futuAutomationLoading = false
+      }
+    },
+    async handleFutuPause (payload) {
+      this.futuAutomationLoading = true
+      try {
+        await broker.futu.pauseAutomation(payload)
+        this.$message.success(this.$t('futuPaper.pausedSuccess'))
+      } catch (error) {
+        this.$message.error((error && error.message) || this.$t('futuPaper.stopUnconfirmed'))
+      } finally {
+        await this.loadOne('futu')
+        this.futuAutomationLoading = false
       }
     },
     async handlePlaceOrder (id, payload) {

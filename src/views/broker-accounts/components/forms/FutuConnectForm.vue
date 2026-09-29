@@ -27,21 +27,24 @@
       </a-button>
     </div>
     <a-form-item :label="$t('futuPaper.accountId')">
-      <a-select v-model="accountId" :disabled="disabled || loading || !accounts.length" :placeholder="$t('futuPaper.selectAfterProbe')" @change="savedCredentialId = null">
+      <a-select v-model="accountId" :disabled="disabled || loading || !accounts.length" :placeholder="$t('futuPaper.selectAfterProbe')" @change="onAccountChange">
         <a-select-option v-for="account in accounts" :key="account.acc_id" :value="Number(account.acc_id)">
           {{ account.acc_id }} · US · SIMULATE
         </a-select-option>
       </a-select>
+    </a-form-item>
+    <a-form-item :label="$t('futuPaper.confirmAccountId')">
+      <a-input v-model.trim="confirmedAccountId" :disabled="disabled || loading || !accountId" :placeholder="$t('futuPaper.confirmAccountIdHint')" />
     </a-form-item>
     <a-alert v-if="probed && !accounts.length" type="warning" show-icon :message="$t('futuPaper.noUsSimAccount')" class="futu-note" />
     <a-form-item :label="$t('futuPaper.credentialName')">
       <a-input v-model.trim="credentialName" :disabled="disabled || loading" />
     </a-form-item>
     <div class="futu-actions">
-      <a-button :loading="saving" :disabled="disabled || !accountId || !!savedCredentialId" @click="saveCredential">
+      <a-button :loading="saving" :disabled="disabled || !accountConfirmed || !!savedCredentialId" @click="saveCredential">
         {{ $t('futuPaper.saveCredential') }}
       </a-button>
-      <a-button type="primary" :loading="loading" :disabled="disabled || !accountId" @click="submit">
+      <a-button type="primary" :loading="loading" :disabled="disabled || !accountConfirmed" @click="submit">
         {{ $t('brokerAccounts.connect') }}
       </a-button>
     </div>
@@ -65,6 +68,7 @@ export default {
       port: 11112,
       securityFirm: 'FUTUSECURITIES',
       accountId: null,
+      confirmedAccountId: '',
       accounts: [],
       probing: false,
       probed: false,
@@ -73,15 +77,25 @@ export default {
       savedCredentialId: null
     }
   },
+  computed: {
+    accountConfirmed () {
+      return !!this.accountId && this.confirmedAccountId === String(this.accountId)
+    }
+  },
   watch: {
     host () { this.resetProbe() },
     port () { this.resetProbe() },
     securityFirm () { this.resetProbe() }
   },
   methods: {
+    onAccountChange () {
+      this.confirmedAccountId = ''
+      this.savedCredentialId = null
+    },
     resetProbe () {
       this.accounts = []
       this.accountId = null
+      this.confirmedAccountId = ''
       this.probed = false
       this.savedCredentialId = null
     },
@@ -99,6 +113,7 @@ export default {
       this.probing = true
       this.probed = false
       this.accountId = null
+      this.confirmedAccountId = ''
       this.savedCredentialId = null
       try {
         const response = await broker.futu.probe(this.payload())
@@ -120,11 +135,11 @@ export default {
       }
     },
     submit () {
-      if (!this.accountId) return
+      if (!this.accountConfirmed) return
       this.$emit('submit', this.payload(this.accountId))
     },
     async saveCredential () {
-      if (!this.accountId || this.savedCredentialId) return
+      if (!this.accountConfirmed || this.savedCredentialId) return
       this.saving = true
       try {
         const response = await createExchangeCredential({

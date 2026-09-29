@@ -44,6 +44,8 @@ const ENDPOINTS = {
     status: '/api/futu/status',
     connect: '/api/futu/connect',
     disconnect: '/api/futu/disconnect',
+    automationArm: '/api/futu/automation/arm',
+    automationPause: '/api/futu/automation/pause',
     probe: '/api/futu/probe',
     account: '/api/futu/account',
     positions: '/api/futu/positions',
@@ -78,6 +80,14 @@ function makeBrokerClient (id) {
     },
     disconnect (data = {}) {
       return request({ url: ep.disconnect, method: 'post', data })
+    },
+    armAutomation (data = {}) {
+      if (!ep.automationArm) throw new Error(`Automation unavailable for ${id}`)
+      return request({ url: ep.automationArm, method: 'post', data })
+    },
+    pauseAutomation (data = {}) {
+      if (!ep.automationPause) throw new Error(`Automation unavailable for ${id}`)
+      return request({ url: ep.automationPause, method: 'post', data })
     },
     account (params = {}) {
       return request({ url: ep.account, method: 'get', params })

@@ -53,6 +53,15 @@
       </div>
     </div>
 
+    <futu-automation-controls
+      v-if="broker.id === 'futu'"
+      :status="status"
+      :loading="automationLoading"
+      :disabled="loading || cloudBlocked"
+      @arm="payload => $emit('futu-arm', payload)"
+      @pause="payload => $emit('futu-pause', payload)"
+    />
+
     <a-alert
       v-if="cloudBlocked"
       type="warning"
@@ -118,6 +127,7 @@ import AlpacaConnectForm from './forms/AlpacaConnectForm.vue'
 import IbkrConnectForm from './forms/IbkrConnectForm.vue'
 import FutuConnectForm from './forms/FutuConnectForm.vue'
 import FutuFillsTable from './FutuFillsTable.vue'
+import FutuAutomationControls from './FutuAutomationControls.vue'
 import BrokerAccountCard from './BrokerAccountCard.vue'
 import BrokerPositionsTable from './BrokerPositionsTable.vue'
 import BrokerOrdersTable from './BrokerOrdersTable.vue'
@@ -137,7 +147,7 @@ const DOCS = {
 
 export default {
   name: 'BrokerPanel',
-  components: { AlpacaConnectForm, IbkrConnectForm, FutuConnectForm, FutuFillsTable, BrokerAccountCard, BrokerPositionsTable, BrokerOrdersTable, ProviderLogo },
+  components: { AlpacaConnectForm, IbkrConnectForm, FutuConnectForm, FutuFillsTable, FutuAutomationControls, BrokerAccountCard, BrokerPositionsTable, BrokerOrdersTable, ProviderLogo },
   props: {
     broker: { type: Object, required: true },
     accounts: { type: Array, default: () => [] },
@@ -145,6 +155,7 @@ export default {
     refreshVersion: { type: Number, default: 0 },
     status: { type: Object, default: () => null },
     loading: { type: Boolean, default: false },
+    automationLoading: { type: Boolean, default: false },
     isDarkTheme: { type: Boolean, default: false },
     cloudBlocked: { type: Boolean, default: false }
   },
