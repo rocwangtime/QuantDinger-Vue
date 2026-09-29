@@ -57,8 +57,8 @@ test('eligibility matches backend set semantics for duplicate market declaration
 test('Futu credential labels distinguish saved accounts with the same alias', () => {
   const first = { id: 7, exchange_id: 'futu', name: 'Futu US SIMULATE', api_key_hint: 'demo/US' }
   const second = { ...first, id: 8 }
-  assert.match(formatExchangeCredentialLabel(first), /#7$/)
-  assert.match(formatExchangeCredentialLabel(second), /#8$/)
+  assert.match(formatExchangeCredentialLabel(first), /^Futu #7 ·/)
+  assert.match(formatExchangeCredentialLabel(second), /^Futu #8 ·/)
   assert.notEqual(formatExchangeCredentialLabel(first), formatExchangeCredentialLabel(second))
   assert.equal(formatExchangeCredentialLabel({ id: 9, exchange_id: 'alpaca', name: 'Paper' }), 'Alpaca · Paper')
 })
