@@ -93,9 +93,12 @@ export function formatExchangeCredentialLabel (cred, opts = {}) {
   const alias = String(cred.name || '').trim()
   const ex = getExchangeDisplayName(cred.exchange_id)
   const hint = includeHint && cred.api_key_hint ? String(cred.api_key_hint).trim() : ''
+  const futuCredentialId = String(cred.exchange_id || '').trim().toLowerCase() === 'futu' && Number(cred.id) > 0
+    ? ` · #${Number(cred.id)}`
+    : ''
   if (alias) {
-    return hint ? `${ex} · ${alias} (${hint})` : `${ex} · ${alias}`
+    return (hint ? `${ex} · ${alias} (${hint})` : `${ex} · ${alias}`) + futuCredentialId
   }
-  if (hint) return `${ex} (${hint})`
-  return unnamed ? `${ex} · ${unnamed}` : ex
+  if (hint) return `${ex} (${hint})${futuCredentialId}`
+  return (unnamed ? `${ex} · ${unnamed}` : ex) + futuCredentialId
 }
