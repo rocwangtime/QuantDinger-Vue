@@ -9,6 +9,7 @@
     decoding="async"
     draggable="false"
   >
+  <span v-else class="provider-logo-fallback" :style="logoStyle">{{ provider.slice(0, 1).toUpperCase() }}</span>
 </template>
 
 <script>
@@ -46,5 +47,14 @@ export default {
   object-fit: contain;
   object-position: center;
   user-select: none;
+}
+.provider-logo-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 700;
 }
 </style>

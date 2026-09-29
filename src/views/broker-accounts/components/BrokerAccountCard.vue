@@ -76,6 +76,19 @@ export default {
           { key: 'account', label: this.$t('brokerAccounts.kpi.account'), value: String(i.account || i.AccountCode || '--') }
         ]
       }
+      if (this.brokerId === 'futu') {
+        const summary = i.summary || {}
+        // OpenD reports "N/A" for the currency of a single-market US paper account.
+        const reportedCurrency = String(summary.currency || '').trim().toUpperCase()
+        const currency = !reportedCurrency || reportedCurrency === 'N/A' ? 'USD' : reportedCurrency
+        return [
+          { key: 'assets', label: this.$t('brokerAccounts.kpi.equity'), value: money(summary.total_assets, currency) },
+          { key: 'cash', label: this.$t('brokerAccounts.kpi.cash'), value: money(summary.cash, currency) },
+          { key: 'power', label: this.$t('brokerAccounts.kpi.buyingPower'), value: money(summary.power, currency), tone: 'accent' },
+          { key: 'account', label: this.$t('brokerAccounts.kpi.account'), value: String(i.account || '--') },
+          { key: 'environment', label: this.$t('futuPaper.environment'), value: 'SIMULATE' }
+        ]
+      }
       return []
     }
   },

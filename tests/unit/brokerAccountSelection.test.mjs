@@ -72,3 +72,40 @@ test('account overview shows true zero and unknown counts separately', () => {
   assert.equal(metrics({ position_count: null }).find(item => item.key === 'positions').value, '--')
   assert.equal(metrics({ recent_filled_order_count: 0 }).find(item => item.key === 'fills').value, '0')
 })
+
+test('US paper account displays USD when OpenD currency is N/A', () => {
+  const component = options('views/broker-accounts/components/BrokerAccountCard.vue')
+  const metrics = component.computed.metrics.call({
+    info: { summary: { currency: 'N/A', total_assets: 1000, cash: 500, power: 750 }, account: 12345 },
+    brokerId: 'futu',
+    $t: key => key
+  })
+  assert.equal(metrics.find(item => item.key === 'assets').value, '$1,000.00')
+  assert.equal(metrics.find(item => item.key === 'cash').value, '$500.00')
+  assert.equal(metrics.find(item => item.key === 'power').value, '$750.00')
+})
+
+test('Futu connection requires typing the exact probed account ID', () => {
+  const component = options('views/broker-accounts/components/forms/FutuConnectForm.vue')
+  const state = { accountId: 12345, confirmedAccountId: '1234' }
+  assert.equal(component.computed.accountConfirmed.call(state), false)
+  state.confirmedAccountId = '12345'
+  assert.equal(component.computed.accountConfirmed.call(state), true)
+  component.methods.onAccountChange.call(state)
+  assert.equal(state.confirmedAccountId, '')
+})
+
+test('Futu automation remains separate from a connected diagnostic session', () => {
+  const component = options('views/broker-accounts/components/FutuAutomationControls.vue')
+  const state = {
+    status: { connected: true, accountId: 12345, raw: { automation: [], automation_hard_switch: true } }
+  }
+  for (const [name, getter] of Object.entries(component.computed)) {
+    Object.defineProperty(state, name, { get: () => getter.call(state) })
+  }
+  assert.equal(state.connected, true)
+  assert.equal(state.state, 'paused')
+  assert.equal(state.accountId, 12345)
+  state.status.raw.automation = [{ acc_id: 12345, state: 'unconfirmed', enabled: false }]
+  assert.equal(state.state, 'unconfirmed')
+})

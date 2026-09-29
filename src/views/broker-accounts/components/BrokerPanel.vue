@@ -31,6 +31,10 @@
             </span>
           </div>
           <div class="bp-badge-row">
+            <a-tag v-if="broker.id === 'futu'" color="blue">SIMULATE · US</a-tag>
+            <a-tag v-if="broker.id === 'futu' && status && status.raw && status.raw.worker_streams && status.raw.worker_streams.length" color="cyan">
+              {{ $t('futuPaper.workerStream') }}: {{ status.raw.worker_streams[0].state }}
+            </a-tag>
             <a-tag v-if="broker.id === 'alpaca' && isConnected" :color="status.paper ? 'blue' : 'orange'">{{ $t(status.paper ? 'brokerAccounts.paperAccount' : 'brokerAccounts.liveAccount') }}</a-tag>
             <a-tag v-for="badge in broker.badges" :key="badge" :color="badgeColor(badge)" class="bp-badge">
               {{ $t('brokerAccounts.badges.' + badge) }}
@@ -44,10 +48,19 @@
           <a-icon type="reload" /> {{ $t('brokerAccounts.refresh') }}
         </a-button>
         <a-button v-if="status && status.connected" type="danger" :loading="loading" @click="$emit('disconnect')">
-          <a-icon type="disconnect" /> {{ $t('brokerAccounts.disconnect') }}
+          <a-icon type="disconnect" /> {{ $t(broker.id === 'futu' ? 'futuPaper.disconnectWeb' : 'brokerAccounts.disconnect') }}
         </a-button>
       </div>
     </div>
+
+    <futu-automation-controls
+      v-if="broker.id === 'futu'"
+      :status="status"
+      :loading="automationLoading"
+      :disabled="loading || cloudBlocked"
+      @arm="payload => $emit('futu-arm', payload)"
+      @pause="payload => $emit('futu-pause', payload)"
+    />
 
     <a-alert
       v-if="cloudBlocked"
@@ -56,6 +69,11 @@
       class="bp-cloud-alert"
       :message="$t('brokerAccounts.cloudBlockedAlert', { broker: $t('brokerAccounts.' + broker.id + '.name') })"
     />
+
+    <div v-if="broker.id === 'futu'" class="bp-futu-links">
+      <router-link to="/strategy-center"><a-icon type="dashboard" /> {{ $t('futuPaper.strategyStatus') }}</router-link>
+      <router-link to="/backtest-center"><a-icon type="line-chart" /> {{ $t('futuPaper.backtests') }}</router-link>
+    </div>
 
     <a-tabs v-model="innerTab" class="bp-inner-tabs">
       <!-- Connect form -->
@@ -97,6 +115,9 @@
           :is-dark-theme="isDarkTheme"
         />
       </a-tab-pane>
+      <a-tab-pane v-if="broker.id === 'futu'" key="fills" :tab="$t('futuPaper.fills')">
+        <futu-fills-table :key="refreshVersion" />
+      </a-tab-pane>
     </a-tabs>
   </div>
 </template>
@@ -104,6 +125,9 @@
 <script>
 import AlpacaConnectForm from './forms/AlpacaConnectForm.vue'
 import IbkrConnectForm from './forms/IbkrConnectForm.vue'
+import FutuConnectForm from './forms/FutuConnectForm.vue'
+import FutuFillsTable from './FutuFillsTable.vue'
+import FutuAutomationControls from './FutuAutomationControls.vue'
 import BrokerAccountCard from './BrokerAccountCard.vue'
 import BrokerPositionsTable from './BrokerPositionsTable.vue'
 import BrokerOrdersTable from './BrokerOrdersTable.vue'
@@ -111,17 +135,19 @@ import ProviderLogo from '@/components/ProviderLogo/ProviderLogo.vue'
 
 const FORM_BY_BROKER = {
   alpaca: 'AlpacaConnectForm',
-  ibkr: 'IbkrConnectForm'
+  ibkr: 'IbkrConnectForm',
+  futu: 'FutuConnectForm'
 }
 
 const DOCS = {
   alpaca: 'https://app.alpaca.markets/paper/dashboard/overview',
-  ibkr: 'https://www.interactivebrokers.com/en/trading/tws.php'
+  ibkr: 'https://www.interactivebrokers.com/en/trading/tws.php',
+  futu: 'https://openapi.futunn.com/futu-api-doc/en/intro/FutuOpenD.html'
 }
 
 export default {
   name: 'BrokerPanel',
-  components: { AlpacaConnectForm, IbkrConnectForm, BrokerAccountCard, BrokerPositionsTable, BrokerOrdersTable, ProviderLogo },
+  components: { AlpacaConnectForm, IbkrConnectForm, FutuConnectForm, FutuFillsTable, FutuAutomationControls, BrokerAccountCard, BrokerPositionsTable, BrokerOrdersTable, ProviderLogo },
   props: {
     broker: { type: Object, required: true },
     accounts: { type: Array, default: () => [] },
@@ -129,6 +155,7 @@ export default {
     refreshVersion: { type: Number, default: 0 },
     status: { type: Object, default: () => null },
     loading: { type: Boolean, default: false },
+    automationLoading: { type: Boolean, default: false },
     isDarkTheme: { type: Boolean, default: false },
     cloudBlocked: { type: Boolean, default: false }
   },
@@ -197,6 +224,7 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.bp-futu-links { display: flex; gap: 16px; }
 .bp-account-selector {
   display: flex;
   align-items: center;

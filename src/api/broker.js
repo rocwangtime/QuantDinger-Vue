@@ -39,6 +39,19 @@ const ENDPOINTS = {
     orders: '/api/alpaca/orders',
     order: '/api/alpaca/order',
     quote: '/api/alpaca/quote'
+  },
+  futu: {
+    status: '/api/futu/status',
+    connect: '/api/futu/connect',
+    disconnect: '/api/futu/disconnect',
+    automationArm: '/api/futu/automation/arm',
+    automationPause: '/api/futu/automation/pause',
+    probe: '/api/futu/probe',
+    account: '/api/futu/account',
+    positions: '/api/futu/positions',
+    orders: '/api/futu/orders',
+    fills: '/api/futu/fills',
+    quote: '/api/futu/quote'
   }
 }
 
@@ -57,8 +70,24 @@ function makeBrokerClient (id) {
     connect (data = {}) {
       return request({ url: ep.connect, method: 'post', data })
     },
+    probe (data = {}) {
+      if (!ep.probe) throw new Error(`Probe unavailable for ${id}`)
+      return request({ url: ep.probe, method: 'post', data })
+    },
+    fills () {
+      if (!ep.fills) throw new Error(`Fills unavailable for ${id}`)
+      return request({ url: ep.fills, method: 'get' })
+    },
     disconnect (data = {}) {
       return request({ url: ep.disconnect, method: 'post', data })
+    },
+    armAutomation (data = {}) {
+      if (!ep.automationArm) throw new Error(`Automation unavailable for ${id}`)
+      return request({ url: ep.automationArm, method: 'post', data })
+    },
+    pauseAutomation (data = {}) {
+      if (!ep.automationPause) throw new Error(`Automation unavailable for ${id}`)
+      return request({ url: ep.automationPause, method: 'post', data })
     },
     account (params = {}) {
       return request({ url: ep.account, method: 'get', params })
@@ -89,16 +118,26 @@ function makeBrokerClient (id) {
 
 export const broker = {
   ibkr: makeBrokerClient('ibkr'),
-  alpaca: makeBrokerClient('alpaca')
+  alpaca: makeBrokerClient('alpaca'),
+  futu: makeBrokerClient('futu')
 }
 
-export const BROKER_IDS = ['alpaca', 'ibkr']
+export const BROKER_IDS = ['futu', 'alpaca', 'ibkr']
 
 /**
  * Static descriptor for each broker (logo color, market focus, connect form
  * schema). Keeps the page declarative and easy to extend with a 4th broker.
  */
 export const BROKER_META = {
+  futu: {
+    id: 'futu',
+    icon: 'line-chart',
+    color: '#14b8a6',
+    accent: '#0f766e',
+    markets: ['USStock'],
+    badges: ['paper_default', 'terminal_required'],
+    cloudFriendly: false
+  },
   alpaca: {
     id: 'alpaca',
     icon: 'thunderbolt',

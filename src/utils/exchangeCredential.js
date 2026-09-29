@@ -1,4 +1,4 @@
-/** Display names for crypto exchange_id values (shared across account pickers). */
+/** Display names for exchange_id values (shared across account pickers). */
 export const CRYPTO_EXCHANGE_DISPLAY_NAMES = {
   binance: 'Binance',
   okx: 'OKX',
@@ -7,7 +7,8 @@ export const CRYPTO_EXCHANGE_DISPLAY_NAMES = {
   gate: 'Gate.io',
   htx: 'HTX',
   alpaca: 'Alpaca',
-  ibkr: 'IBKR'
+  ibkr: 'IBKR',
+  futu: 'Futu'
 }
 
 export const CRYPTO_EXCHANGE_IDS = new Set([
@@ -21,7 +22,8 @@ export const CRYPTO_EXCHANGE_IDS = new Set([
 
 export const US_STOCK_EXCHANGE_IDS = new Set([
   'alpaca',
-  'ibkr'
+  'ibkr',
+  'futu'
 ])
 
 export const QUICK_TRADE_EXCHANGE_IDS = new Set([
@@ -89,8 +91,11 @@ export function formatExchangeCredentialLabel (cred, opts = {}) {
   if (!cred) return ''
   const { unnamed = '', includeHint = true } = opts
   const alias = String(cred.name || '').trim()
-  const ex = getExchangeDisplayName(cred.exchange_id)
+  const displayName = getExchangeDisplayName(cred.exchange_id)
   const hint = includeHint && cred.api_key_hint ? String(cred.api_key_hint).trim() : ''
+  const ex = String(cred.exchange_id || '').trim().toLowerCase() === 'futu' && Number(cred.id) > 0
+    ? `${displayName} #${Number(cred.id)}`
+    : displayName
   if (alias) {
     return hint ? `${ex} · ${alias} (${hint})` : `${ex} · ${alias}`
   }

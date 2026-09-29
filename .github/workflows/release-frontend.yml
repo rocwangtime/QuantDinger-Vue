@@ -31,8 +31,32 @@ permissions:
   packages: write   # needed to push to GHCR
 
 jobs:
+  verify:
+    name: Test and build Vue dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pinned pnpm dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Build frontend
+        run: pnpm build
+
   publish:
     name: Build & push frontend image
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
