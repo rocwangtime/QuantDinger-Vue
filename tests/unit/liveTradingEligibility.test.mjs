@@ -25,11 +25,12 @@ test('same-market crypto portfolios support live execution with crypto credentia
   assert.equal(credentialMatchesLiveStrategy(cryptoPortfolio, 'alpaca'), false)
 })
 
-test('US stock strategies support both configured stock brokers', () => {
+test('US stock strategies support configured stock brokers including Futu SIMULATE', () => {
   const manifest = { strategyType: 'portfolio', markets: ['USStock'] }
   assert.equal(supportsLiveExecutionMode(manifest), true)
   assert.equal(credentialMatchesLiveStrategy(manifest, 'alpaca'), true)
   assert.equal(credentialMatchesLiveStrategy(manifest, 'IBKR'), true)
+  assert.equal(credentialMatchesLiveStrategy(manifest, 'futu'), true)
   assert.equal(credentialMatchesLiveStrategy(manifest, 'okx'), false)
 })
 
@@ -42,6 +43,7 @@ test('mixed and unsupported markets remain signal-only', () => {
     assert.equal(supportsLiveExecutionMode(manifest), false)
     assert.equal(credentialMatchesLiveStrategy(manifest, 'binance'), false)
     assert.equal(credentialMatchesLiveStrategy(manifest, 'alpaca'), false)
+    assert.equal(credentialMatchesLiveStrategy(manifest, 'futu'), false)
   }
 })
 
