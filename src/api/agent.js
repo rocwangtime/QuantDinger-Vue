@@ -53,6 +53,27 @@ export function listAgentAudit (params) {
   })
 }
 
+/** Human JWT only. Agent tokens can read policy but cannot change it. */
+export function getAgentTradingPolicy (params = {}) {
+  return request({ url: '/api/agent/v1/admin/trading-policy', method: 'get', params })
+}
+
+export function setAgentTradingPolicy (data) {
+  return request({ url: '/api/agent/v1/admin/trading-policy', method: 'put', data })
+}
+
+export function listAgentTradeIntents () {
+  return request({ url: '/api/agent/v1/admin/trade-intents', method: 'get' })
+}
+
+export function cancelAgentOrders () {
+  return request({
+    url: '/api/agent/v1/admin/agent-orders/cancel',
+    method: 'post',
+    data: { confirm: 'CANCEL_AGENT_ORDERS' }
+  })
+}
+
 /** Self-service token policy + risk disclosure (any logged-in user). */
 export function getMyAgentTokenPolicy () {
   return request({

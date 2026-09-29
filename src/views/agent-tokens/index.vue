@@ -10,6 +10,8 @@
       </p>
     </div>
 
+    <a-alert type="info" show-icon :message="$t('agentTrade.noRealToken')" style="margin-bottom: 16px" />
+
     <a-tabs v-model="activeTab" class="manage-tabs">
       <!-- Tokens tab -->
       <a-tab-pane key="tokens" :tab="$t('agentTokens.tabTokens') || 'Tokens'">
@@ -57,7 +59,7 @@
 
             <template slot="paper" slot-scope="text">
               <a-tag :color="text ? 'green' : 'red'">
-                {{ text ? ($t('agentTokens.paperOnly') || 'paper-only') : ($t('agentTokens.live') || 'live-eligible') }}
+                {{ text ? ($t('agentTokens.paperOnly') || 'paper-only') : $t('agentTrade.legacyToken') }}
               </a-tag>
             </template>
 
@@ -87,6 +89,10 @@
             </template>
           </a-table>
         </a-card>
+      </a-tab-pane>
+
+      <a-tab-pane key="trade-intents" :tab="$t('agentTrade.tab')">
+        <AgentTradeIntents />
       </a-tab-pane>
 
       <!-- Audit tab -->
@@ -182,7 +188,7 @@
         </a-form-model-item>
 
         <a-form-model-item :label="$t('agentTokens.paperOnly') || 'Paper-only'">
-          <a-switch v-model="issueForm.paper_only" />
+          <a-switch v-model="issueForm.paper_only" disabled />
           <div class="hint" :class="{ danger: !issueForm.paper_only && issueForm.scopes.includes('T') }">
             {{ paperHint }}
           </div>
@@ -234,6 +240,7 @@
 
 <script>
 import { mapState } from 'vuex'
+import AgentTradeIntents from './AgentTradeIntents.vue'
 import {
   issueAgentToken,
   listAgentTokens,
@@ -243,6 +250,7 @@ import {
 
 export default {
   name: 'AgentTokens',
+  components: { AgentTradeIntents },
   data () {
     return {
       activeTab: 'tokens',
@@ -286,12 +294,7 @@ export default {
       return this.isDarkTheme ? 'agent-tokens-modal theme-dark' : 'agent-tokens-modal'
     },
     paperHint () {
-      const sel = this.issueForm.scopes || []
-      if (!this.issueForm.paper_only && sel.includes('T')) {
-        return this.$t('agentTokens.paperOff_T') ||
-          'Live trading also requires AGENT_LIVE_TRADING_ENABLED=true on the server. Until then T-class calls still record paper orders.'
-      }
-      return this.$t('agentTokens.paperOnHint') || 'Recommended. Trades are simulated and never touch exchange credentials.'
+      return this.$t('agentTrade.noRealToken')
     },
     tokenColumns () {
       return [
@@ -366,7 +369,7 @@ export default {
         W: this.$t('agentTokens.scopeHint.W') || 'Workspace write: create/patch strategies.',
         B: this.$t('agentTokens.scopeHint.B') || 'Backtest / experiment / regime jobs.',
         N: this.$t('agentTokens.scopeHint.N') || 'Notifications & misc side-effects.',
-        T: this.$t('agentTokens.scopeHint.T') || 'Trading. Paper-only by default; live needs an extra server-side switch.'
+        T: this.$t('agentTrade.noRealToken')
       }
       return m[s] || ''
     },
