@@ -1,5 +1,6 @@
 <template>
   <div class="profile-agent-tokens" :class="{ 'theme-dark': isDarkTheme }">
+    <a-alert type="info" show-icon class="risk-banner" :message="$t('agentTrade.noRealToken')" />
     <a-alert
       v-if="policy && policy.is_saas"
       type="warning"
@@ -62,7 +63,7 @@
           </template>
           <template slot="paper" slot-scope="text">
             <a-tag :color="text ? 'green' : 'red'">
-              {{ text ? ($t('agentTokens.paperOnly') || 'paper-only') : ($t('agentTokens.live') || 'live-eligible') }}
+              {{ text ? ($t('agentTokens.paperOnly') || 'paper-only') : $t('agentTrade.legacyToken') }}
             </a-tag>
           </template>
           <template slot="status" slot-scope="text">
@@ -165,23 +166,10 @@
         </a-form-model-item>
 
         <a-form-model-item :label="$t('agentTokens.paperOnly') || 'Paper-only'">
-          <a-switch v-model="issueForm.paper_only" />
+          <a-switch v-model="issueForm.paper_only" disabled />
           <div class="hint" :class="{ danger: needsLiveAck }">{{ paperHint }}</div>
         </a-form-model-item>
 
-        <a-form-model-item v-if="needsLiveAck" :wrapper-col="{ span: 15, offset: 7 }">
-          <a-alert type="error" show-icon style="margin-bottom: 12px">
-            <template slot="message">{{ $t('profile.agentTokens.liveRiskTitle') || '实盘风险确认' }}</template>
-            <template slot="description">
-              <ul class="risk-list compact">
-                <li v-for="(line, idx) in userFundRisks" :key="'fund-' + idx">{{ line }}</li>
-              </ul>
-            </template>
-          </a-alert>
-          <a-checkbox v-model="issueForm.ack_live_trading_risk">
-            {{ $t('profile.agentTokens.liveRiskAck') || '我已阅读并理解上述风险，确认签发可实盘的 T scope Token' }}
-          </a-checkbox>
-        </a-form-model-item>
       </a-form-model>
     </a-modal>
 
@@ -275,15 +263,10 @@ export default {
       ]
     },
     needsLiveAck () {
-      const sel = this.issueForm.scopes || []
-      return sel.includes('T') && !this.issueForm.paper_only
+      return false
     },
     paperHint () {
-      if (this.needsLiveAck) {
-        return this.$t('agentTokens.paperOff_T') ||
-          'Live trading also requires AGENT_LIVE_TRADING_ENABLED=true on the server.'
-      }
-      return this.$t('agentTokens.paperOnHint') || 'Recommended. Trades are simulated by default.'
+      return this.$t('agentTrade.noRealToken')
     },
     tokenColumns () {
       return [
@@ -360,7 +343,7 @@ export default {
         W: this.$t('agentTokens.scopeHint.W'),
         B: this.$t('agentTokens.scopeHint.B'),
         N: this.$t('agentTokens.scopeHint.N'),
-        T: this.$t('agentTokens.scopeHint.T')
+        T: this.$t('agentTrade.noRealToken')
       }
       return m[s] || ''
     },

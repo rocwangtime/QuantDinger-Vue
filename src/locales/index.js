@@ -29,6 +29,7 @@ import eventRadarMessages from './lang/event-radar'
 import currentFeatureOverrides from './lang/current-feature-overrides'
 import strategyEvolutionMessages from './lang/strategy-evolution'
 import quickTradeSpotSellMessages from './lang/quick-trade-spot-sell'
+import agentTradingIntentMessages from './lang/agent-trading-intents'
 
 Vue.use(VueI18n)
 
@@ -62,7 +63,8 @@ const messages = {
     ...(currentFeatureOverrides[defaultLang] || {}),
     ...(eventRadarMessages[defaultLang] || {}),
     ...(strategyEvolutionMessages[defaultLang] || {}),
-    ...(quickTradeSpotSellMessages[defaultLang] || {})
+    ...(quickTradeSpotSellMessages[defaultLang] || {}),
+    ...(agentTradingIntentMessages[defaultLang] || {})
   }
 }
 
@@ -155,7 +157,8 @@ function mergeLocaleOverrides (lang) {
     ...(currentFeatureOverrides[lang] || {}),
     ...(eventRadarMessages[lang] || {}),
     ...(strategyEvolutionMessages[lang] || {}),
-    ...(quickTradeSpotSellMessages[lang] || {})
+    ...(quickTradeSpotSellMessages[lang] || {}),
+    ...(agentTradingIntentMessages[lang] || {})
   }
   i18n.setLocaleMessage(lang, {
     ...(i18n.getLocaleMessage(lang) || {}),
@@ -200,7 +203,8 @@ export async function loadLanguageAsync (lang = defaultLang) {
       ...(strategyBuilderOverrides[lang] || {}),
       ...(currentFeatureOverrides[lang] || {}),
       ...(eventRadarMessages[lang] || {}),
-      ...(quickTradeSpotSellMessages[lang] || {})
+      ...(quickTradeSpotSellMessages[lang] || {}),
+      ...(agentTradingIntentMessages[lang] || {})
     })
     i18n.setLocaleMessage(lang, locale)
     loadedLanguages.push(lang)
