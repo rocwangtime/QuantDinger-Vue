@@ -48,7 +48,7 @@
           <a-icon type="reload" /> {{ $t('brokerAccounts.refresh') }}
         </a-button>
         <a-button v-if="status && status.connected" type="danger" :loading="loading" @click="$emit('disconnect')">
-          <a-icon type="disconnect" /> {{ $t('brokerAccounts.disconnect') }}
+          <a-icon type="disconnect" /> {{ $t(broker.id === 'futu' ? 'futuPaper.disconnectWeb' : 'brokerAccounts.disconnect') }}
         </a-button>
       </div>
     </div>
