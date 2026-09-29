@@ -72,3 +72,15 @@ test('account overview shows true zero and unknown counts separately', () => {
   assert.equal(metrics({ position_count: null }).find(item => item.key === 'positions').value, '--')
   assert.equal(metrics({ recent_filled_order_count: 0 }).find(item => item.key === 'fills').value, '0')
 })
+
+test('US paper account displays USD when OpenD currency is N/A', () => {
+  const component = options('views/broker-accounts/components/BrokerAccountCard.vue')
+  const metrics = component.computed.metrics.call({
+    info: { summary: { currency: 'N/A', total_assets: 1000, cash: 500, power: 750 }, account: 12345 },
+    brokerId: 'futu',
+    $t: key => key
+  })
+  assert.equal(metrics.find(item => item.key === 'assets').value, '$1,000.00')
+  assert.equal(metrics.find(item => item.key === 'cash').value, '$500.00')
+  assert.equal(metrics.find(item => item.key === 'power').value, '$750.00')
+})
