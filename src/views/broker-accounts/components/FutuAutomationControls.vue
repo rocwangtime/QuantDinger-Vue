@@ -6,7 +6,10 @@
       :message="$t('futuPaper.automationState') + ': ' + $t('futuPaper.state.' + state)"
       :description="state === 'unconfirmed' ? $t('futuPaper.stopUnconfirmed') : $t('futuPaper.connectionIsReadOnly')"
     />
-    <div v-if="stateRow && stateRow.credential_id" class="futu-automation-credential">
+    <div v-if="connected && raw.credential_id" class="futu-automation-credential">
+      {{ $t('futuPaper.strategyCredential', { id: raw.credential_id }) }}
+    </div>
+    <div v-if="state === 'armed' && stateRow && stateRow.credential_id" class="futu-automation-credential">
       {{ $t('futuPaper.automationCredential', { id: stateRow.credential_id }) }}
     </div>
     <div v-if="stateRow && stateRow.last_error" class="futu-automation-error">{{ stateRow.last_error }}</div>

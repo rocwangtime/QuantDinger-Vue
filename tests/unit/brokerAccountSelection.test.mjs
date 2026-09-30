@@ -114,6 +114,7 @@ test('Futu HK connect confirms one selected paper account without a separate sav
 })
 
 test('Futu automation remains separate from a connected diagnostic session', () => {
+  const source = fs.readFileSync(new URL('../../src/views/broker-accounts/components/FutuAutomationControls.vue', import.meta.url), 'utf8')
   const component = options('views/broker-accounts/components/FutuAutomationControls.vue')
   const state = {
     status: { connected: true, accountId: 12345, raw: { automation: [], automation_hard_switch: true } }
@@ -124,6 +125,7 @@ test('Futu automation remains separate from a connected diagnostic session', () 
   assert.equal(state.connected, true)
   assert.equal(state.state, 'paused')
   assert.equal(state.accountId, 12345)
+  assert.match(source, /connected && raw\.credential_id/)
   state.status.raw.automation = [{ acc_id: 12345, state: 'unconfirmed', enabled: false }]
   assert.equal(state.state, 'unconfirmed')
 })
