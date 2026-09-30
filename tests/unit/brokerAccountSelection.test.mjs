@@ -129,3 +129,27 @@ test('Futu automation remains separate from a connected diagnostic session', () 
   state.status.raw.automation = [{ acc_id: 12345, state: 'unconfirmed', enabled: false }]
   assert.equal(state.state, 'unconfirmed')
 })
+
+test('Agent policy follows the selected HK or US Futu credential market', async () => {
+  const component = options('views/agent-tokens/AgentTradeIntents.vue')
+  const warnings = []
+  const state = {
+    selectedAccount: 'futu:7',
+    futuCredentials: [{ id: 7, api_key_hint: 'host:11112 (demo/HK)' }],
+    enableText: 'PAPER_AUTO',
+    $t: key => key,
+    $message: { warning: message => warnings.push(message) }
+  }
+  for (const [name, getter] of Object.entries(component.computed)) {
+    Object.defineProperty(state, name, { get: () => getter.call(state) })
+  }
+  assert.equal(state.selectedMarketCategory, 'HKStock')
+  assert.equal(state.quoteCurrency, 'HKD')
+  state.futuCredentials[0].api_key_hint = 'host:11112 (demo/US)'
+  assert.equal(state.selectedMarketCategory, 'USStock')
+  assert.equal(state.quoteCurrency, 'USD')
+  state.futuCredentials[0].api_key_hint = 'unknown'
+  assert.equal(state.selectedMarketCategory, '')
+  await component.methods.changeMode.call(state, 'PAPER_AUTO')
+  assert.deepEqual(warnings, ['agentTrade.marketUnknown'])
+})

@@ -21,10 +21,10 @@
       <p class="policy-note">{{ selectedBroker === 'futu' ? $t('agentTrade.futuPaperOnly') : $t('agentTrade.paperOnly') }}</p>
       <router-link v-if="selectedBroker === 'futu'" to="/broker-accounts">{{ $t('agentTrade.openAccountCenter') }}</router-link>
       <div class="policy-grid">
-        <label>{{ $t('agentTrade.markets') }}<a-input v-model="form.markets" :disabled="selectedBroker === 'futu'" :placeholder="selectedBroker === 'futu' ? 'USStock' : 'Crypto'" /></label>
-        <label>{{ $t('agentTrade.symbols') }}<a-input v-model="form.symbols" :placeholder="selectedBroker === 'futu' ? 'AAPL' : 'BTC/USDT'" /></label>
-        <label>{{ $t('agentTrade.maxOrder') }}<a-input-number v-model="form.maxOrder" :min="1" :max="100000" :precision="2" /></label>
-        <label>{{ $t('agentTrade.maxDaily') }}<a-input-number v-model="form.maxDaily" :min="1" :max="1000000" :precision="2" /></label>
+        <label>{{ $t('agentTrade.markets') }}<a-input v-model="form.markets" :disabled="selectedBroker === 'futu'" :placeholder="selectedBroker === 'futu' ? selectedMarketCategory : 'Crypto'" /></label>
+        <label>{{ $t('agentTrade.symbols') }}<a-input v-model="form.symbols" :placeholder="selectedBroker === 'futu' ? (selectedFutuMarket === 'HK' ? '00700.HK' : 'AAPL') : 'BTC/USDT'" /></label>
+        <label>{{ $t('agentTrade.maxOrder') }}{{ quoteCurrency ? ` (${quoteCurrency})` : '' }}<a-input-number v-model="form.maxOrder" :min="1" :max="100000" :precision="2" /></label>
+        <label>{{ $t('agentTrade.maxDaily') }}{{ quoteCurrency ? ` (${quoteCurrency})` : '' }}<a-input-number v-model="form.maxDaily" :min="1" :max="1000000" :precision="2" /></label>
         <label>{{ $t('agentTrade.maxCount') }}<a-input-number v-model="form.maxCount" :min="1" :max="100" /></label>
         <label>{{ $t('agentTrade.enableText') }}<a-input v-model="enableText" placeholder="PAPER_AUTO" autocomplete="off" /></label>
       </div>
@@ -90,6 +90,17 @@ export default {
   computed: {
     selectedBroker () { return this.selectedAccount.startsWith('futu:') ? 'futu' : 'platform' },
     selectedAccountRef () { return this.selectedBroker === 'futu' ? `credential:${this.selectedAccount.split(':')[1]}` : 'default' },
+    selectedFutuMarket () {
+      if (this.selectedBroker !== 'futu') return ''
+      const id = Number(this.selectedAccount.split(':')[1])
+      const item = this.futuCredentials.find(row => Number(row.id) === id)
+      const explicit = String(item && item.trade_market || '').toUpperCase()
+      const hinted = String(item && item.api_key_hint || '').match(/\(demo\/(US|HK)\)/i)
+      const market = explicit || (hinted && hinted[1] || '').toUpperCase()
+      return ['US', 'HK'].includes(market) ? market : ''
+    },
+    selectedMarketCategory () { return this.selectedFutuMarket === 'HK' ? 'HKStock' : this.selectedFutuMarket === 'US' ? 'USStock' : '' },
+    quoteCurrency () { return this.selectedFutuMarket === 'HK' ? 'HKD' : this.selectedFutuMarket === 'US' ? 'USD' : '' },
     columns () {
       return [
         { title: 'ID', dataIndex: 'id', width: 65 },
@@ -145,7 +156,7 @@ export default {
         this.globalPolicy = (globalPolicy && globalPolicy.data) || emptyPolicy()
         this.intents = (intents && intents.data) || []
         this.form = {
-          markets: broker === 'futu' ? 'USStock' : (this.policy.allowed_markets || []).join(','),
+          markets: broker === 'futu' ? this.selectedMarketCategory : (this.policy.allowed_markets || []).join(','),
           symbols: (this.policy.allowed_symbols || []).join(','),
           maxOrder: Number(this.policy.max_order_notional || 1000),
           maxDaily: Number(this.policy.max_daily_notional || 5000),
@@ -158,6 +169,10 @@ export default {
       }
     },
     async changeMode (mode) {
+      if (mode === 'PAPER_AUTO' && this.selectedBroker === 'futu' && !this.selectedMarketCategory) {
+        this.$message.warning(this.$t('agentTrade.marketUnknown'))
+        return
+      }
       if (mode === 'PAPER_AUTO' && this.enableText !== 'PAPER_AUTO') {
         this.$message.warning(this.$t('agentTrade.confirmRequired'))
         return
@@ -169,7 +184,7 @@ export default {
           account_ref: this.selectedAccountRef,
           mode,
           confirm_mode: mode,
-          allowed_markets: this.selectedBroker === 'futu' ? ['USStock'] : this.csv(this.form.markets),
+          allowed_markets: this.selectedBroker === 'futu' ? [this.selectedMarketCategory].filter(Boolean) : this.csv(this.form.markets),
           allowed_symbols: this.csv(this.form.symbols),
           max_order_notional: this.form.maxOrder,
           max_daily_notional: this.form.maxDaily,
