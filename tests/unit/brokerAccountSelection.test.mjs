@@ -95,6 +95,24 @@ test('Futu connection requires typing the exact probed account ID', () => {
   assert.equal(state.confirmedAccountId, '')
 })
 
+test('Futu HK connect confirms one selected paper account without a separate save action', () => {
+  const file = 'views/broker-accounts/components/forms/FutuConnectForm.vue'
+  const source = fs.readFileSync(new URL('../../src/' + file, import.meta.url), 'utf8')
+  const component = options(file)
+  const emitted = []
+  const state = {
+    ...component.data(), tradeMarket: 'HK', accountId: 12345,
+    confirmedAccountId: '12345', accountConfirmed: true,
+    $emit: (...args) => emitted.push(args)
+  }
+  state.payload = component.methods.payload.bind(state)
+  component.methods.submit.call(state)
+  assert.equal(emitted[0][1].trade_market, 'HK')
+  assert.equal(emitted[0][1].market_category, 'HKStock')
+  assert.equal(emitted[0][1].confirm_acc_id, '12345')
+  assert.equal(source.includes('futuPaper.saveCredential'), false)
+})
+
 test('Futu automation remains separate from a connected diagnostic session', () => {
   const component = options('views/broker-accounts/components/FutuAutomationControls.vue')
   const state = {

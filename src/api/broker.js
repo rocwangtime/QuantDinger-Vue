@@ -134,7 +134,7 @@ export const BROKER_META = {
     icon: 'line-chart',
     color: '#14b8a6',
     accent: '#0f766e',
-    markets: ['USStock'],
+    markets: ['USStock', 'HKStock'],
     badges: ['paper_default', 'terminal_required'],
     cloudFriendly: false
   },

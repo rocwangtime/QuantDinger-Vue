@@ -31,7 +31,7 @@
             </span>
           </div>
           <div class="bp-badge-row">
-            <a-tag v-if="broker.id === 'futu'" color="blue">SIMULATE · US</a-tag>
+            <a-tag v-if="broker.id === 'futu'" color="blue">SIMULATE · {{ status && status.raw && status.raw.trade_market || 'US' }}</a-tag>
             <a-tag v-if="broker.id === 'futu' && status && status.raw && status.raw.worker_streams && status.raw.worker_streams.length" color="cyan">
               {{ $t('futuPaper.workerStream') }}: {{ status.raw.worker_streams[0].state }}
             </a-tag>
