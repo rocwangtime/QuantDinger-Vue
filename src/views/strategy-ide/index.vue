@@ -1564,6 +1564,10 @@ export default {
           assetType: this.getRouteAssetType()
         })
         this.applyCopilotScriptDraft()
+        if (String((this.$route.query || {}).copilotBacktest || '') === '1') {
+          await this.$nextTick()
+          if (await this.verifyScriptCode()) this.openBacktestCenter()
+        }
         if (this.isLegacyAiDraftRoute() || this.hasRouteSourceId()) {
           this.writeDraftRoute({ openTemplate: this.shouldOpenTemplateFromRoute() })
         }

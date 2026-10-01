@@ -191,6 +191,9 @@
               </div>
             </details>
             <div v-if="msg.role === 'assistant' && !msg.isThinking" class="message-actions">
+              <button v-if="isStrategyCodeMessage(msg)" type="button" class="message-primary-action" @click="reviewStrategyCode(msg)">
+                <a-icon type="experiment" /> {{ isZh ? '校验并进入回测' : 'Validate and open backtest' }}
+              </button>
               <button type="button" @click="copyMessageContent(msg)">
                 <a-icon type="copy" /> {{ text.copyAnswer }}
               </button>
@@ -203,6 +206,10 @@
               <button v-if="strategyCodeForMessage(msg)" type="button" @click="copyStrategyCode(msg)">
                 <a-icon type="copy" /> {{ text.copyCode }}
               </button>
+            </div>
+            <div v-if="llmUsageForMessage(msg)" class="message-llm-usage">
+              <span>{{ llmUsageText(msg) }}</span>
+              <a v-if="llmUsageForMessage(msg).price_source" :href="llmUsageForMessage(msg).price_source" target="_blank" rel="noopener noreferrer">{{ isZh ? '价格依据' : 'Pricing' }}</a>
             </div>
             <div v-if="formatMessageTime(msg)" class="message-time">{{ formatMessageTime(msg) }}</div>
           </div>
@@ -1164,10 +1171,11 @@ export default {
       const target = this.normalizeSymbolOption(this.context)
       const symbol = (target && target.symbol) || this.i18nText('aiAssetAnalysis.copilot.currentSymbol', 'the current symbol')
       return buildContextualFollowups({
-        isZh: false,
+        isZh: this.isZh,
         target,
         intent: message.meta || message.intent || '',
-        hasReport: !!message.report
+        hasReport: !!message.report,
+        hasStrategyCode: this.isStrategyCodeMessage(message)
       }).map(item => ({
         ...item,
         label: this.i18nText(`aiAssetAnalysis.copilot.followups.${item.key}.label`, item.label, { symbol }),
@@ -2487,7 +2495,41 @@ export default {
     },
     visibleMessageActions (msg) {
       const actions = Array.isArray(msg && msg.actions) ? msg.actions : []
-      return actions.filter(action => action && !['generate_code', 'agent_usage'].includes(action.type))
+      return actions.filter(action => action && !['generate_code', 'agent_usage', 'llm_usage'].includes(action.type))
+    },
+    llmUsageForMessage (msg) {
+      const actions = Array.isArray(msg && msg.actions) ? msg.actions : []
+      const action = actions.find(item => item && item.type === 'llm_usage')
+      return action && action.payload && Number.isFinite(Number(action.payload.total_tokens)) ? action.payload : null
+    },
+    llmUsageText (msg) {
+      const usage = this.llmUsageForMessage(msg)
+      if (!usage) return ''
+      const tokens = Number(usage.total_tokens || 0).toLocaleString()
+      const prefix = usage.token_source === 'provider' ? '' : (this.isZh ? '约 ' : '~')
+      const model = [usage.provider, usage.model].filter(Boolean).join(' · ')
+      const cost = usage.estimated_cost == null
+        ? (this.isZh ? '费用暂无报价' : 'cost unavailable')
+        : `${this.isZh ? '预估' : 'est.'} ${usage.currency === 'CNY' ? '¥' : '$'}${Number(usage.estimated_cost).toFixed(6)}`
+      return `${model ? `${model} · ` : ''}${prefix}${tokens} tokens (${Number(usage.input_tokens || 0)} ↑ / ${Number(usage.output_tokens || 0)} ↓) · ${cost}`
+    },
+    isStrategyCodeMessage (msg) {
+      if (!msg || msg.role !== 'assistant') return false
+      const code = this.strategyCodeForMessage(msg)
+      if (!code || code.length > 200000) return false
+      const marker = `${msg.intent || ''} ${msg.meta || ''} ${msg.content || ''}`.toLowerCase()
+      return /strategy_build|strategy api v2|策略源码|策略草稿/.test(marker) && /\bdef\s+(initialize|handle_data)\s*\(/.test(code)
+    },
+    reviewStrategyCode (msg) {
+      if (!this.isStrategyCodeMessage(msg)) return
+      try {
+        sessionStorage.setItem('qd_strategy_source', this.strategyCodeForMessage(msg))
+        sessionStorage.setItem('qd_copilot_script_strategy_meta', JSON.stringify(this.inferScriptDraftMetaFromMessage(msg)))
+      } catch (_) {
+        this.$message.error(this.isZh ? '浏览器暂存失败，无法传递策略代码。' : 'Could not transfer draft code in this browser.')
+        return
+      }
+      this.$router.push({ path: '/strategy-ide', query: { tab: 'script', draft: '1', copilotBacktest: '1' } })
     },
     messageActionLabel (action) {
       const type = String((action && action.type) || '')
@@ -3922,6 +3964,9 @@ export default {
           },
           query: { tab: 'script', draft: '1' }
         }]
+        if (res && res.data && res.data.llm_usage) {
+          assistantMsg.actions.push({ key: 'llm-usage', type: 'llm_usage', payload: res.data.llm_usage })
+        }
         await this.persistCopilotMessage(assistantMsg, 'strategy_build')
       } catch (e) {
         console.warn('Script strategy generation failed', e)
@@ -4460,8 +4505,9 @@ export default {
     },
     setAgentUsageActions (message, actions = [], usage = null) {
       if (!message) return
-      const current = (Array.isArray(message.actions) ? message.actions : []).filter(action => action && action.type !== 'agent_usage')
+      const current = (Array.isArray(message.actions) ? message.actions : []).filter(action => action && !['agent_usage', 'llm_usage'].includes(action.type))
       let usageAction = (Array.isArray(actions) ? actions : []).find(action => action && action.type === 'agent_usage')
+      const llmUsageAction = (Array.isArray(actions) ? actions : []).find(action => action && action.type === 'llm_usage')
       if (!usageAction && usage) {
         usageAction = {
           key: 'agent-usage',
@@ -4471,7 +4517,7 @@ export default {
           payload: usage
         }
       }
-      message.actions = usageAction ? [usageAction, ...current] : current
+      message.actions = [usageAction, llmUsageAction, ...current].filter(Boolean)
     },
     getAccessToken () {
       return storage.get(ACCESS_TOKEN) || storage.get('Authorization') || storage.get('token') || ''
@@ -6204,6 +6250,24 @@ export default {
   background: var(--qd-accent-ring);
   transform: translateY(-1px);
 }
+
+.message-actions .message-primary-action {
+  background: var(--qd-accent);
+  border-color: var(--qd-accent);
+  color: #fff;
+}
+
+.message-llm-usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--qd-text-subtle);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.message-llm-usage a { color: inherit; text-decoration: underline; }
 
 .attachment-row,
 .pending-attachments {
@@ -8609,6 +8673,14 @@ body.realdark .copilot-workbench .message-actions button:hover,
   border-color: rgba(82, 196, 26, 0.5) !important;
   background: rgba(82, 196, 26, 0.13) !important;
   color: #c2ef9f !important;
+}
+
+body.dark .copilot-workbench .message-actions button.message-primary-action,
+body.realdark .copilot-workbench .message-actions button.message-primary-action,
+.theme-dark .copilot-workbench .message-actions button.message-primary-action {
+  border-color: #52c41a !important;
+  background: #308d2c !important;
+  color: #fff !important;
 }
 
 body.dark .followup-suggestions,

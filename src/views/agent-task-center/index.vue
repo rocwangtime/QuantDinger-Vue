@@ -53,14 +53,29 @@
             <p>{{ monitorTarget(monitor) }} · {{ copy.every }} {{ monitorInterval(monitor) }} · {{ copy.runs }} {{ monitor.run_count || 0 }}</p>
             <small>{{ copy.lastRun }} {{ displayTime(monitor.last_run_at) }} · {{ monitorResult(monitor) }}<template v-if="monitor.is_active"> · {{ copy.nextRun }} {{ displayTime(monitor.next_run_at) }}</template></small>
           </div>
-          <a-button v-if="monitor.is_active" size="small" icon="pause" :loading="updatingId === monitor.id" @click="toggleMonitor(monitor)">{{ copy.pause }}</a-button>
-          <a-popconfirm v-else :title="copy.enableConfirm" :ok-text="copy.enable" :cancel-text="copy.cancel" @confirm="toggleMonitor(monitor)">
-            <a-button size="small" icon="caret-right" :loading="updatingId === monitor.id">{{ copy.enable }}</a-button>
-          </a-popconfirm>
+          <div class="task-row-actions">
+            <a-button size="small" icon="history" @click="openMonitorRuns(monitor)">{{ copy.runHistory }}</a-button>
+            <a-button v-if="monitor.is_active" size="small" icon="pause" :loading="updatingId === monitor.id" @click="toggleMonitor(monitor)">{{ copy.pause }}</a-button>
+            <a-popconfirm v-else :title="copy.enableConfirm" :ok-text="copy.enable" :cancel-text="copy.cancel" @confirm="toggleMonitor(monitor)">
+              <a-button size="small" icon="caret-right" :loading="updatingId === monitor.id">{{ copy.enable }}</a-button>
+            </a-popconfirm>
+          </div>
         </div>
       </section>
 
       <div class="task-aside">
+        <section class="task-section">
+          <div class="section-heading"><div><h2>{{ copy.developmentTitle }}</h2><p>{{ copy.developmentHint }}</p></div></div>
+          <div v-if="!scriptSources.length && !backtests.length" class="task-empty">{{ copy.noDrafts }}</div>
+          <div v-for="source in scriptSources.slice(0, 4)" :key="`source-${source.id}`" class="strategy-row">
+            <div><strong>{{ source.name || source.strategy_name || `#${source.id}` }}</strong><small>{{ copy.sourceDraft }}</small></div>
+            <div class="task-row-actions"><a-button size="small" type="link" @click="openSource(source.id)">{{ copy.edit }} →</a-button><a-button size="small" type="link" @click="openBacktest(source.id)">{{ copy.backtest }} →</a-button></div>
+          </div>
+          <div v-for="run in backtests.slice(0, 3)" :key="`backtest-${run.id}`" class="strategy-row">
+            <div><strong>{{ run.strategy_name || run.symbol || `#${run.id}` }}</strong><small>{{ copy.backtestRecord }} · {{ displayTime(run.created_at) }}</small></div>
+            <a-button size="small" type="link" @click="openBacktest(run.source_id)">{{ copy.reviewBacktest }} →</a-button>
+          </div>
+        </section>
         <section class="task-section">
           <div class="section-heading"><div><h2>{{ copy.universeTitle }}</h2><p>{{ copy.universeHint }}</p></div></div>
           <div v-if="!watchlist.length" class="task-empty">{{ copy.noWatchlist }}</div>
@@ -97,28 +112,43 @@
         <a-alert type="info" show-icon :message="copy.createBoundary" />
       </a-form>
     </a-modal>
+    <a-drawer :visible="runsVisible" :title="selectedMonitor ? selectedMonitor.name : copy.runHistory" :width="520" @close="runsVisible = false">
+      <a-spin :spinning="loadingRuns">
+        <a-alert type="info" show-icon :message="copy.runsBoundary" class="task-alert" />
+        <div v-if="!monitorRuns.length" class="task-empty">{{ copy.noRuns }}</div>
+        <div v-for="run in monitorRuns" :key="run.id" class="task-run">
+          <div class="task-run-heading"><strong>{{ runStatus(run) }}</strong><span>{{ displayTime(run.created_at) }}</span></div>
+          <p v-if="run.result && run.result.error">{{ run.result.error }}</p>
+          <p v-else-if="run.result">{{ copy.analyzed }} {{ run.result.analyzed_count || 0 }} / {{ run.result.position_count || 0 }}</p>
+          <div v-for="item in ((run.result && run.result.position_analyses) || [])" :key="`${item.market}:${item.symbol}`" class="task-run-symbol">
+            <strong>{{ item.market }}:{{ item.symbol }}</strong>
+            <span>{{ item.error || item.final_decision || copy.noResult }}</span>
+          </div>
+        </div>
+      </a-spin>
+    </a-drawer>
   </div>
 </template>
 
 <script>
 import { mapState } from 'vuex'
-import { getMonitors, addMonitor, updateMonitor } from '@/api/portfolio'
+import { getMonitors, getMonitorRuns, addMonitor, updateMonitor } from '@/api/portfolio'
 import { getWatchlist } from '@/api/market'
-import { getStrategyList } from '@/api/strategy'
+import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory } from '@/api/strategy'
 
 const words = {
   zh: {
-    eyebrow: 'AGENT 工作台', title: '任务中心', subtitle: '从机会发现到模拟运行，查看任务状态并决定下一步。', refresh: '刷新', loadError: '部分任务数据未能加载，请刷新后核对。', statusTitle: '任务状态', activeResearch: '运行中的定时研究', pausedResearch: '已暂停的定时研究', runningStrategies: '运行中的策略', safetySummary: '研究任务不会下单；交易权限在账户与策略运行中独立控制。', startTitle: '开始一项工作', startHint: '选择目标，Agent 的产物会引导你进入下一阶段。', discover: '挖掘机会', discoverDesc: '从观察范围筛选值得进一步研究的标的', research: '研究标的', researchDesc: '追问行情、事件、风险与数据依据', build: '开发策略', buildDesc: '把想法写成可回测的策略草稿', review: '运行与复盘', reviewDesc: '检查策略状态、订单和交易记录', openResearch: '打开 AI 投研', openRuntime: '打开策略运行', monitorTitle: '定时研究任务', monitorHint: '按固定间隔分析观察名单中的标的；事件触发暂未接入。', createMonitor: '新建定时研究', monitorBoundary: '这里只进行 AI 分析与通知，不会产生交易订单。', noMonitors: '暂无定时研究任务。', active: '运行中', paused: '已暂停', every: '每', runs: '已运行', lastRun: '上次运行', nextRun: '下次计划', pause: '暂停', enable: '启用', enableConfirm: '启用后系统将按计划自动分析，可能消耗 AI 额度；确认启用？', cancel: '取消', never: '尚未运行', noResult: '暂无结果', success: '完成', skipped: '跳过', failed: '失败', universeTitle: '观察范围', universeHint: '作为机会筛选和定时研究的输入。', noWatchlist: '观察名单为空。先到 AI 投研添加标的。', manageUniverse: '管理观察名单', executionTitle: '策略运行', executionHint: '与定时研究分开管理。', noStrategies: '暂无策略运行记录。', details: '详情', allStrategies: '查看全部策略', manageAccounts: '管理模拟账户与授权', executionBoundary: '模拟账户选择、交易授权、风控和暂停操作均在账户及策略运行页面完成。', createPaused: '创建为暂停', target: '观察标的', chooseTarget: '从观察名单选择', interval: '分析间隔', hour: '小时', hours: '小时', day: '天', createBoundary: '新任务默认暂停。这里只支持固定间隔研究，不支持事件触发或自动下单。', created: '定时研究任务已创建（暂停）', updated: '任务状态已更新', actionError: '操作失败，请重试。'
+    eyebrow: 'AGENT 工作台', title: '任务中心', subtitle: '从机会发现到模拟运行，查看任务状态并决定下一步。', refresh: '刷新', loadError: '部分任务数据未能加载，请刷新后核对。', statusTitle: '任务状态', activeResearch: '运行中的定时研究', pausedResearch: '已暂停的定时研究', runningStrategies: '运行中的策略', safetySummary: '研究任务不会下单；交易权限在账户与策略运行中独立控制。', startTitle: '开始一项工作', startHint: '选择目标，Agent 的产物会引导你进入下一阶段。', discover: '挖掘机会', discoverDesc: '从观察范围筛选值得进一步研究的标的', research: '研究标的', researchDesc: '追问行情、事件、风险与数据依据', build: '开发策略', buildDesc: '把想法写成可回测的策略草稿', review: '运行与复盘', reviewDesc: '检查策略状态、订单和交易记录', openResearch: '打开 AI 投研', openRuntime: '打开策略运行', developmentTitle: '策略开发进度', developmentHint: '草稿校验、回测与运行各有独立记录。', noDrafts: '暂无策略草稿或回测记录。', sourceDraft: '已保存的策略源码', edit: '编辑', backtest: '回测', backtestRecord: '历史回测', reviewBacktest: '查看', monitorTitle: '定时研究任务', monitorHint: '按固定间隔分析观察名单中的标的；事件触发暂未接入。', createMonitor: '新建定时研究', monitorBoundary: '这里只进行 AI 分析与通知，不会产生交易订单。', noMonitors: '暂无定时研究任务。', active: '运行中', paused: '已暂停', every: '每', runs: '已运行', lastRun: '上次运行', nextRun: '下次计划', pause: '暂停', enable: '启用', enableConfirm: '启用后系统将按计划自动分析，可能消耗 AI 额度；确认启用？', cancel: '取消', never: '尚未运行', noResult: '暂无结果', success: '完成', skipped: '跳过', failed: '失败', runHistory: '运行记录', runsBoundary: '这些记录只表示研究分析，不代表交易指令或成交。', noRuns: '暂无运行记录', analyzed: '已分析', universeTitle: '观察范围', universeHint: '作为机会筛选和定时研究的输入。', noWatchlist: '观察名单为空。先到 AI 投研添加标的。', manageUniverse: '管理观察名单', executionTitle: '策略运行', executionHint: '与定时研究分开管理。', noStrategies: '暂无策略运行记录。', details: '详情', allStrategies: '查看全部策略', manageAccounts: '管理模拟账户与授权', executionBoundary: '模拟账户选择、交易授权、风控和暂停操作均在账户及策略运行页面完成。', createPaused: '创建为暂停', target: '观察标的', chooseTarget: '从观察名单选择', interval: '分析间隔', hour: '小时', hours: '小时', day: '天', createBoundary: '新任务默认暂停。这里只支持固定间隔研究，不支持事件触发或自动下单。', created: '定时研究任务已创建（暂停）', updated: '任务状态已更新', actionError: '操作失败，请重试。'
   },
   en: {
-    eyebrow: 'AGENT WORKSPACE', title: 'Task Center', subtitle: 'Track work from opportunity discovery to paper execution and choose the next step.', refresh: 'Refresh', loadError: 'Some task data could not be loaded. Refresh to verify.', statusTitle: 'Task status', activeResearch: 'Active research schedules', pausedResearch: 'Paused research schedules', runningStrategies: 'Running strategies', safetySummary: 'Research schedules never place orders. Trading authorization is managed separately.', startTitle: 'Start work', startHint: 'Choose an outcome and continue through the resulting workflow.', discover: 'Discover opportunities', discoverDesc: 'Screen your watchlist for research candidates', research: 'Research a symbol', researchDesc: 'Examine market data, events, risks and evidence', build: 'Develop a strategy', buildDesc: 'Turn an idea into a backtestable draft', review: 'Run and review', reviewDesc: 'Inspect strategy status, orders and fills', openResearch: 'Open AI Research', openRuntime: 'Open Strategy Run', monitorTitle: 'Scheduled research', monitorHint: 'Analyze watchlist symbols at fixed intervals; event triggers are not yet available.', createMonitor: 'New research schedule', monitorBoundary: 'These tasks only analyze and notify; they never place orders.', noMonitors: 'No scheduled research tasks yet.', active: 'Active', paused: 'Paused', every: 'Every', runs: 'Runs', lastRun: 'Last run', nextRun: 'Next planned', pause: 'Pause', enable: 'Enable', enableConfirm: 'This task may consume AI credits when scheduled. Enable it?', cancel: 'Cancel', never: 'Never', noResult: 'No result', success: 'Completed', skipped: 'Skipped', failed: 'Failed', universeTitle: 'Observation universe', universeHint: 'Input for discovery and scheduled research.', noWatchlist: 'Your watchlist is empty. Add a symbol in AI Research.', manageUniverse: 'Manage watchlist', executionTitle: 'Strategy run', executionHint: 'Managed separately from research schedules.', noStrategies: 'No strategy runs yet.', details: 'Details', allStrategies: 'View all strategies', manageAccounts: 'Manage paper accounts and authorization', executionBoundary: 'Paper account selection, authorization, risk limits and pausing are managed in Accounts and Strategy Run.', createPaused: 'Create paused', target: 'Watchlist symbol', chooseTarget: 'Select from watchlist', interval: 'Analysis interval', hour: 'hour', hours: 'hours', day: 'day', createBoundary: 'New tasks start paused. Only fixed-interval research is supported here; no event trigger or order execution.', created: 'Research schedule created (paused)', updated: 'Task status updated', actionError: 'Action failed. Please retry.'
+    eyebrow: 'AGENT WORKSPACE', title: 'Task Center', subtitle: 'Track work from opportunity discovery to paper execution and choose the next step.', refresh: 'Refresh', loadError: 'Some task data could not be loaded. Refresh to verify.', statusTitle: 'Task status', activeResearch: 'Active research schedules', pausedResearch: 'Paused research schedules', runningStrategies: 'Running strategies', safetySummary: 'Research schedules never place orders. Trading authorization is managed separately.', startTitle: 'Start work', startHint: 'Choose an outcome and continue through the resulting workflow.', discover: 'Discover opportunities', discoverDesc: 'Screen your watchlist for research candidates', research: 'Research a symbol', researchDesc: 'Examine market data, events, risks and evidence', build: 'Develop a strategy', buildDesc: 'Turn an idea into a backtestable draft', review: 'Run and review', reviewDesc: 'Inspect strategy status, orders and fills', openResearch: 'Open AI Research', openRuntime: 'Open Strategy Run', developmentTitle: 'Strategy development', developmentHint: 'Draft validation, backtests and runs have separate records.', noDrafts: 'No saved drafts or backtests yet.', sourceDraft: 'Saved strategy source', edit: 'Edit', backtest: 'Backtest', backtestRecord: 'Past backtest', reviewBacktest: 'Open', monitorTitle: 'Scheduled research', monitorHint: 'Analyze watchlist symbols at fixed intervals; event triggers are not yet available.', createMonitor: 'New research schedule', monitorBoundary: 'These tasks only analyze and notify; they never place orders.', noMonitors: 'No scheduled research tasks yet.', active: 'Active', paused: 'Paused', every: 'Every', runs: 'Runs', lastRun: 'Last run', nextRun: 'Next planned', pause: 'Pause', enable: 'Enable', enableConfirm: 'This task may consume AI credits when scheduled. Enable it?', cancel: 'Cancel', never: 'Never', noResult: 'No result', success: 'Completed', skipped: 'Skipped', failed: 'Failed', runHistory: 'Run history', runsBoundary: 'Research records are not trading instructions or fills.', noRuns: 'No runs yet', analyzed: 'Analyzed', universeTitle: 'Observation universe', universeHint: 'Input for discovery and scheduled research.', noWatchlist: 'Your watchlist is empty. Add a symbol in AI Research.', manageUniverse: 'Manage watchlist', executionTitle: 'Strategy run', executionHint: 'Managed separately from research schedules.', noStrategies: 'No strategy runs yet.', details: 'Details', allStrategies: 'View all strategies', manageAccounts: 'Manage paper accounts and authorization', executionBoundary: 'Paper account selection, authorization, risk limits and pausing are managed in Accounts and Strategy Run.', createPaused: 'Create paused', target: 'Watchlist symbol', chooseTarget: 'Select from watchlist', interval: 'Analysis interval', hour: 'hour', hours: 'hours', day: 'day', createBoundary: 'New tasks start paused. Only fixed-interval research is supported here; no event trigger or order execution.', created: 'Research schedule created (paused)', updated: 'Task status updated', actionError: 'Action failed. Please retry.'
   }
 }
 
 export default {
   name: 'AgentTaskCenter',
   data () {
-    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240 }
+    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [] }
   },
   computed: {
     ...mapState({ navTheme: state => state.app.theme }),
@@ -136,7 +166,7 @@ export default {
       if (this.loading) return
       this.loading = true
       this.loadError = false
-      const results = await Promise.allSettled([getMonitors(), getWatchlist(), getStrategyList()])
+      const results = await Promise.allSettled([getMonitors(), getWatchlist(), getStrategyList(), getScriptSourceList(), getStrategyBacktestHistory({ limit: 3 })])
       const value = index => {
         const result = results[index]
         if (result.status !== 'fulfilled' || !result.value || result.value.code !== 1) {
@@ -146,11 +176,14 @@ export default {
         const data = result.value.data
         if (Array.isArray(data)) return data
         if (index === 1 && data && Array.isArray(data.watchlist)) return data.watchlist
+        if (index === 3 && data && Array.isArray(data.items)) return data.items
         return []
       }
       this.monitors = value(0)
       this.watchlist = value(1).filter(item => item && item.market && item.symbol)
       this.strategies = value(2)
+      this.scriptSources = value(3)
+      this.backtests = value(4)
       this.loading = false
     },
     monitorTarget (monitor) {
@@ -169,12 +202,26 @@ export default {
       const result = monitor.last_result || {}
       return result.skipped ? this.copy.skipped : result.success ? this.copy.success : this.copy.failed
     },
+    runStatus (run) { return this.copy[run.status === 'completed' ? 'success' : run.status] || run.status || this.copy.noResult },
+    async openMonitorRuns (monitor) {
+      this.selectedMonitor = monitor
+      this.monitorRuns = []
+      this.runsVisible = true
+      this.loadingRuns = true
+      try {
+        const result = await getMonitorRuns(monitor.id)
+        if (!result || result.code !== 1) throw new Error((result && result.msg) || this.copy.actionError)
+        if (this.selectedMonitor && this.selectedMonitor.id === monitor.id) this.monitorRuns = Array.isArray(result.data) ? result.data : []
+      } catch (error) { this.$message.error((error && error.message) || this.copy.actionError) } finally { this.loadingRuns = false }
+    },
     displayTime (value) { return value ? String(value).replace('T', ' ').slice(0, 19) : this.copy.never },
     strategyStatus (strategy) { return String(strategy.status || '—') },
     openResearch () { this.$router.push('/ai-asset-analysis') },
     openDiscovery () { this.$router.push({ path: '/ai-asset-analysis', query: { scope: 'watchlist', copilotPrompt: this.copy === words.zh ? '请从我的观察名单中筛选值得进一步研究的机会，说明所用数据及其时效、筛选依据和风险；不要下单。' : 'Screen my watchlist for research opportunities. Explain data sources, freshness, selection criteria, and risks. Do not place orders.' } }) },
     openStrategyDraft () { this.$router.push({ path: '/ai-asset-analysis', query: { scope: 'unbound', copilotPrompt: this.copy === words.zh ? '请帮我把交易想法整理成可回测的 QuantDinger Strategy API V2 策略。先确认市场、标的、周期、入场、退出与风控条件；不要启动交易。' : 'Help turn my idea into a backtestable QuantDinger Strategy API V2 draft. First clarify market, symbol, timeframe, entry, exit, and risk rules. Do not start trading.' } }) },
     openRuntime (id) { this.$router.push({ path: '/strategy-center', query: id ? { strategyId: id } : {} }) },
+    openSource (id) { this.$router.push({ path: '/strategy-ide', query: { tab: 'script', sourceId: id } }) },
+    openBacktest (id) { this.$router.push({ path: '/backtest-center', query: id ? { sourceId: id } : {} }) },
     openAccounts () { this.$router.push('/broker-accounts') },
     researchWatch (item) { this.$router.push({ path: '/ai-asset-analysis', query: { market: item.market, symbol: item.symbol, copilotPrompt: this.copy === words.zh ? `研究 ${item.market}:${item.symbol} 的近期机会与风险，请注明数据时效和依据，不要下单。` : `Research opportunities and risks for ${item.market}:${item.symbol}. Cite data freshness and evidence. Do not place orders.` } }) },
     openCreateMonitor () { this.selectedWatchKey = undefined; this.intervalMinutes = 240; this.createVisible = true },
@@ -245,6 +292,11 @@ export default {
 .task-empty { padding: 24px 8px; color: var(--task-muted); }
 .task-row, .strategy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--task-border); }
 .task-row-main { min-width: 0; }
+.task-row-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.task-run { padding: 15px 0; border-bottom: 1px solid var(--task-border); }
+.task-run-heading { display: flex; justify-content: space-between; gap: 10px; }
+.task-run-heading span, .task-run p { color: var(--task-muted); }
+.task-run-symbol { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
 .task-row-title { display: flex; align-items: center; gap: 9px; }
 .task-row-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-row-title span { padding: 2px 6px; border-radius: 4px; white-space: nowrap; }

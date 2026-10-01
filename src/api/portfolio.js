@@ -53,6 +53,14 @@ export function getMonitors () {
   })
 }
 
+export function getMonitorRuns (id, limit = 20) {
+  return request({
+    url: `/api/portfolio/monitors/${id}/runs`,
+    method: 'get',
+    params: { limit }
+  })
+}
+
 export function addMonitor (data) {
   return request({
     url: '/api/portfolio/monitors',
