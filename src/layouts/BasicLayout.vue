@@ -560,6 +560,14 @@ export default {
       })
       const groups = [
         {
+          name: 'MenuGroupAgentTasks',
+          path: '/menu-group/agent-task-center',
+          title: this.$t('menu.dashboard.agentTaskCenter') || 'Task Center',
+          icon: 'schedule',
+          paths: ['/agent-task-center'],
+          singleAsItem: true
+        },
+        {
           name: 'MenuGroupAI',
           path: '/menu-group/ai-workspace',
           title: this.$t('menu.group.aiWorkspace') || 'AI Workspace',

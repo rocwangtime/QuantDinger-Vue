@@ -3613,6 +3613,7 @@ const locale = {
   "menu.billing": "Mitgliedschaft",
   "menu.dashboard": "Armaturenbrett",
   "menu.dashboard.aiAssetAnalysis": "KI-Analyse",
+  "menu.dashboard.agentTaskCenter": "Aufgabenzentrale",
   "menu.dashboard.aiQuant": "KI-Quant",
   "menu.dashboard.aiTradingAssistant": "KI-Handelsassistent",
   "menu.dashboard.analysis": "KI-Analyse",

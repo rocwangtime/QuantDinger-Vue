@@ -3613,6 +3613,7 @@ const locale = {
   "menu.billing": "Членство",
   "menu.dashboard": "Панель управления",
   "menu.dashboard.aiAssetAnalysis": "AI-анализ",
+  "menu.dashboard.agentTaskCenter": "Центр задач",
   "menu.dashboard.aiQuant": "AI Quant",
   "menu.dashboard.aiTradingAssistant": "ИИ-помощник по торговле",
   "menu.dashboard.analysis": "Анализ ИИ",

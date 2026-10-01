@@ -475,7 +475,7 @@
             <a-checkbox value="webhook"><a-icon type="api" /> {{ text.notifyWebhook }}</a-checkbox>
           </a-checkbox-group>
         </a-form-item>
-        <a-alert :message="text.monitorTip" type="info" show-icon />
+        <a-alert :message="text.monitorTip + (isZh ? ' 创建后默认暂停。' : ' New tasks start paused.')" type="info" show-icon />
       </a-form>
     </a-modal>
 
@@ -731,6 +731,7 @@ export default {
       markets: [],
       context: { market: '', symbol: '' },
       selectedSymbolValue: '',
+      skipDefaultWatchSymbol: false,
       watchAddValue: undefined,
       symbolOptions: [],
       symbolSearching: false,
@@ -1337,6 +1338,9 @@ export default {
     this.applyIncomingCopilotPrompt()
     this.$nextTick(this.resizeComposer)
   },
+  activated () {
+    this.applyIncomingCopilotPrompt()
+  },
   updated () {
     this.scheduleMarkdownCharts()
   },
@@ -1351,6 +1355,12 @@ export default {
   methods: {
     applyIncomingCopilotPrompt () {
       const query = (this.$route && this.$route.query) || {}
+      if (query.scope === 'watchlist' || query.scope === 'unbound') {
+        this.context = { market: '', symbol: '' }
+        this.selectedSymbolValue = ''
+        this.draftContextLock = null
+        this.skipDefaultWatchSymbol = true
+      }
       let prompt = ''
       const key = String(query.copilotPromptKey || '')
       if (key && key.startsWith('qd_copilot_') && typeof sessionStorage !== 'undefined') {
@@ -1383,6 +1393,7 @@ export default {
       const nextQuery = { ...query }
       delete nextQuery.copilotPrompt
       delete nextQuery.copilotPromptKey
+      delete nextQuery.scope
       if (this.$router) this.$router.replace({ path: this.$route.path, query: nextQuery }).catch(() => {})
     },
     quickTaskPromptKey (id) {
@@ -1718,7 +1729,7 @@ export default {
       }
     },
     applyDefaultWatchSymbol () {
-      if (this.selectedSymbolValue || this.context.symbol || this.draftContextLock) return
+      if (this.skipDefaultWatchSymbol || this.selectedSymbolValue || this.context.symbol || this.draftContextLock) return
       const first = (this.watchlist || [])[0]
       if (!first) return
       this.context.market = first.market || this.context.market || firstMarketValue(this.markets)
@@ -2803,7 +2814,7 @@ export default {
             language: this.$store && this.$store.getters ? (this.$store.getters.lang || 'zh-CN') : (this.$i18n ? this.$i18n.locale : 'zh-CN')
           },
           notification_config: { channels },
-          is_active: true
+          is_active: false
         })
         if (!res || res.code === 0) throw new Error((res && res.msg) || this.text.monitorCreated)
         this.$message.success(this.text.monitorCreated)
@@ -2820,7 +2831,7 @@ export default {
               interval: this.formatIntervalText(interval),
               notification: channels.length ? channels.map(channel => this.monitorChannelLabel(channel)).join(', ') : this.i18nText('aiAssetAnalysis.copilot.monitorNoNotify', 'record only')
             }
-          ),
+          ) + (this.isZh ? '\n\n任务默认暂停；请在「任务中心」确认后启用。' : '\n\nThis task starts paused. Review and enable it in Task Center.'),
           meta: this.i18nText('aiAssetAnalysis.copilot.monitorCreatedMeta', 'task created'),
           created_at: new Date().toISOString()
         }
@@ -3954,7 +3965,7 @@ export default {
             language: this.$store && this.$store.getters ? (this.$store.getters.lang || 'zh-CN') : (this.$i18n ? this.$i18n.locale : 'zh-CN')
           },
           notification_config: { channels },
-          is_active: true
+          is_active: false
         })
         if (!res || res.code === 0) throw new Error((res && res.msg) || this.text.monitorCreated)
         this.$message.success(this.text.monitorCreated)

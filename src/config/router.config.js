@@ -7,8 +7,14 @@ export const asyncRouterMap = [
     name: 'index',
     component: BasicLayout,
     meta: { title: 'menu.home' },
-    redirect: '/ai-asset-analysis',
+    redirect: '/agent-task-center',
     children: [
+      {
+        path: '/agent-task-center',
+        name: 'AgentTaskCenter',
+        component: () => import('@/views/agent-task-center'),
+        meta: { title: 'menu.dashboard.agentTaskCenter', keepAlive: true, icon: 'schedule', permission: ['dashboard'] }
+      },
       // AI asset analysis landing page.
       // keepAlive: true so the heavy market-data fetches (sentiment / indices /
       // heatmap / calendar / opportunities / watchlist prices) only run on the
