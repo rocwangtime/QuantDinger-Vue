@@ -20,6 +20,7 @@ test('a generated strategy can be handed to validation and backtest without copy
   assert.match(copilot, /@click="reviewStrategyCode\(msg\)"/)
   assert.match(copilot, /sessionStorage\.setItem\('qd_strategy_source'/)
   assert.match(copilot, /copilotBacktest: '1'/)
+  assert.match(copilot, /useFollowupPrompt \(item\) \{[\s\S]*?this\.\$nextTick\(\(\) => this\.sendMessage\(\)\)/)
   assert.match(editor, /if \(await this\.verifyScriptCode\(\)\) this\.openBacktestCenter\(\)/)
   assert.match(editor, /activated \(\) \{[\s\S]*?this\.resumeCopilotBacktest\(\)/)
   assert.match(editor, /async resumeCopilotBacktest \(\) \{[\s\S]*?this\.hasCopilotScriptDraft\(\)/)

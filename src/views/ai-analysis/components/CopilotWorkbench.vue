@@ -2014,7 +2014,7 @@ export default {
       })
     },
     useFollowupPrompt (item) {
-      if (!item || !item.prompt) return
+      if (!item || !item.prompt || this.sending) return
       this.activeResearchMode = item.mode || this.activeResearchMode
       this.recordCopilotEvent('followup_used', item.key, {
         source: 'followup',
@@ -2024,6 +2024,7 @@ export default {
       this.usePrompt(item.prompt, {
         ...(this.normalizeSymbolOption(this.context) ? { contextLock: this.context } : {})
       })
+      this.$nextTick(() => this.sendMessage())
     },
     async loadSavedPrompts () {
       this.loadingSavedPrompts = true
