@@ -10,6 +10,16 @@
       >
         <a-button slot="action" size="small" type="primary" ghost @click="openBacktestCenter">{{ text.backtestTitle }}</a-button>
       </a-alert>
+      <a-alert
+        v-if="scriptValidationError"
+        class="script-validation-alert"
+        type="error"
+        show-icon
+        :message="text.verifyFailed"
+        :description="scriptValidationError"
+      >
+        <a-button slot="action" size="small" :loading="aiStrategyGenerating" @click="repairCopilotScript">{{ aiStrategyQuickPrompts[3].label }}</a-button>
+      </a-alert>
       <section class="script-panel script-panel--editor">
         <strategy-editor
           ref="scriptEditor"
@@ -716,6 +726,8 @@ export default {
       editorInitialTemplateKey: '',
       editorKeySeed: 0,
       scriptVerified: false,
+      scriptValidationError: '',
+      copilotRepairToBacktest: false,
       savingScript: false,
       savingScriptMode: '',
       deletingScript: false,
@@ -1011,6 +1023,7 @@ export default {
     scriptCode (value) {
       this.scriptVerified = false
       this.strategyValidation = null
+      this.scriptValidationError = ''
       this.syncRunConfigFromCode(value)
     },
     currentSourceId (value) {
@@ -1375,6 +1388,8 @@ export default {
       const prompt = String(this.aiStrategyPrompt || '').trim()
       if (!prompt || this.aiStrategyGenerating || this.scriptCodeHidden) return
       const existingCode = this.getCurrentScriptCode()
+      const repairToBacktest = this.copilotRepairToBacktest
+      this.copilotRepairToBacktest = false
       this.aiStrategyGenerating = true
       this.aiRequestBaseCode = existingCode
       this.aiMessages.push({
@@ -1425,6 +1440,10 @@ export default {
           }
           const autoApplied = await this.autoApplyStrategyAiCandidate()
           if (!autoApplied) this.$message.success(this.aiWorkspaceText.candidateReady)
+          if (autoApplied && repairToBacktest) {
+            await this.$nextTick()
+            if (await this.verifyScriptCode({ silentSuccess: true })) this.openBacktestCenter()
+          }
         }
         this.aiPanelExpanded = true
         this.$nextTick(this.scrollStrategyAiConversation)
@@ -2140,17 +2159,35 @@ export default {
         const verification = (res && res.data) || {}
         if (!(res && res.code === 1 && verification.valid)) {
           const reason = verification.error || (res && res.msg) || this.text.verifyFailed
+          this.scriptValidationError = String(reason).slice(0, 1500)
           this.$message.error(this.text.verifyBlocked.replace('{reason}', reason))
           return false
         }
         this.scriptVerified = true
+        this.scriptValidationError = ''
         this.publishContractPreview = verification.marketplace_contract || null
         if (!options.silentSuccess) this.$message.success(this.text.verifyPassed)
         return true
       } catch (e) {
-        this.$message.error(`${this.text.verifyFailed}: ${e.backendMessage || e.message || ''}`)
+        const envelope = e && e.response && e.response.data
+        const detail = envelope && envelope.data && envelope.data.error
+        const reason = String(detail || e.backendMessage || e.message || this.text.verifyFailed).slice(0, 1500)
+        this.scriptValidationError = reason
+        this.$message.error(`${this.text.verifyFailed}: ${reason}`)
         return false
       }
+    },
+    async repairCopilotScript () {
+      if (!this.scriptValidationError || this.aiStrategyGenerating) return
+      const reason = this.scriptValidationError
+      const isZh = String((this.$i18n && this.$i18n.locale) || '').toLowerCase().startsWith('zh')
+      this.aiStrategyPrompt = isZh
+        ? `修复当前策略，使其通过 QuantDinger Strategy API V2 编译。编译错误：${reason}。保留原有交易意图与风控，不要启动交易。`
+        : `Repair the current strategy so it compiles under QuantDinger Strategy API V2. Compiler error: ${reason}. Preserve the trading intent and risk controls; do not start trading.`
+      this.aiInteractionMode = 'modify'
+      this.aiPanelExpanded = true
+      this.copilotRepairToBacktest = true
+      await this.sendStrategyAiTurn()
     },
     formatVerifyHint (hint) {
       if (!hint || !hint.code) return ''
@@ -2789,6 +2826,14 @@ export default {
 .adapted-backtest-alert {
   flex: 0 0 auto;
   margin-bottom: 10px;
+}
+
+.script-validation-alert {
+  flex: 0 0 auto;
+  max-height: 132px;
+  margin-bottom: 10px;
+  overflow-y: auto;
+  white-space: pre-wrap;
 }
 
 .strategy-ide-layout {
