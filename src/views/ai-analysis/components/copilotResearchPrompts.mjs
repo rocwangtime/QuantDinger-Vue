@@ -126,10 +126,23 @@ export function buildResearchStarterPrompts ({ isZh = false, target = null, watc
     .sort((a, b) => b.priority - a.priority)
 }
 
-export function buildContextualFollowups ({ isZh = false, target = null, intent = '', hasReport = false } = {}) {
+export function buildContextualFollowups ({ isZh = false, target = null, intent = '', hasReport = false, hasStrategyCode = false } = {}) {
   const normalized = normalizeTarget(target)
   const symbol = (normalized && normalized.symbol) || (isZh ? '当前标的' : 'the current symbol')
   const normalizedIntent = String(intent || '').toLowerCase()
+  if (normalizedIntent.includes('strategy_build') || hasStrategyCode) {
+    return hasStrategyCode
+      ? [
+          item('followup_strategy_risk', 'strategy', 'safety-certificate', isZh ? '审查策略风险' : 'Review strategy risks', isZh ? '审查刚才这份策略源码的逻辑错误、API V2 契约、未来函数与回测偏差；逐条给出修正建议，不要启动交易。' : 'Review the strategy code for logic errors, API V2 contract mismatches, look-ahead bias and backtest bias. Suggest fixes; do not start trading.'),
+          item('followup_strategy_explain', 'strategy', 'profile', isZh ? '解释入场与退出' : 'Explain entry and exit', isZh ? '用通俗语言解释刚才策略的入场、退出、仓位和止损，以及什么情况下会保持空仓。' : 'Explain the draft’s entry, exit, sizing, stops and stay-out conditions in plain language.'),
+          item('followup_strategy_variants', 'strategy', 'branches', isZh ? '比较保守版本' : 'Compare a conservative variant', isZh ? '基于刚才策略给出更保守的参数版本，并说明对交易频率、回撤和机会成本的预期影响；不要启动交易。' : 'Propose a more conservative variant and explain expected trade frequency, drawdown and opportunity cost; do not start trading.')
+        ]
+      : [
+          item('followup_strategy_defaults', 'strategy', 'code', isZh ? '按默认生成策略' : 'Generate default draft', isZh ? '按你刚才建议的默认参数，生成符合当前 QuantDinger Strategy API V2 契约的完整 Python 策略源码；不要启动交易。' : 'Generate complete Python Strategy API V2 source with the defaults you just proposed. Do not start trading.'),
+          item('followup_strategy_risk_rules', 'strategy', 'safety-certificate', isZh ? '先明确风控' : 'Clarify risk controls', isZh ? '先和我确认单笔风险、最大回撤、止损与仓位规则，再生成策略。' : 'Clarify per-trade risk, maximum drawdown, stops and sizing before generating code.'),
+          item('followup_strategy_timeframe', 'strategy', 'clock-circle', isZh ? '调整周期' : 'Change timeframe', isZh ? '我想调整刚才策略的交易周期和执行频率，请列出适合的选择及利弊。' : 'Help me adjust the draft’s timeframe and execution frequency; compare the tradeoffs.')
+        ]
+  }
   const base = [
     item('followup_levels', 'technical', 'column-height', isZh ? '展开关键支撑阻力' : 'Expand key support and resistance', isZh
       ? `继续分析 ${symbol}，展开关键支撑位、阻力位、突破确认条件和失效条件。`

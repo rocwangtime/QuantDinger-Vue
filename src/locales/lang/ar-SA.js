@@ -3613,6 +3613,7 @@ const locale = {
   "menu.billing": "عضوية",
   "menu.dashboard": "لوحة التحكم",
   "menu.dashboard.aiAssetAnalysis": "تحليل ذكي بالذكاء الاصطناعي",
+  "menu.dashboard.agentTaskCenter": "مركز المهام",
   "menu.dashboard.aiQuant": "محلل كمي بالذكاء الاصطناعي",
   "menu.dashboard.aiTradingAssistant": "مساعد التداول بالذكاء الاصطناعي",
   "menu.dashboard.analysis": "تحليل الذكاء الاصطناعي",

@@ -191,6 +191,9 @@
               </div>
             </details>
             <div v-if="msg.role === 'assistant' && !msg.isThinking" class="message-actions">
+              <button v-if="isStrategyCodeMessage(msg)" type="button" class="message-primary-action" @click="reviewStrategyCode(msg)">
+                <a-icon type="experiment" /> {{ isZh ? '校验并进入回测' : 'Validate and open backtest' }}
+              </button>
               <button type="button" @click="copyMessageContent(msg)">
                 <a-icon type="copy" /> {{ text.copyAnswer }}
               </button>
@@ -203,6 +206,10 @@
               <button v-if="strategyCodeForMessage(msg)" type="button" @click="copyStrategyCode(msg)">
                 <a-icon type="copy" /> {{ text.copyCode }}
               </button>
+            </div>
+            <div v-if="llmUsageForMessage(msg)" class="message-llm-usage">
+              <span>{{ llmUsageText(msg) }}</span>
+              <a v-if="llmUsageForMessage(msg).price_source" :href="llmUsageForMessage(msg).price_source" target="_blank" rel="noopener noreferrer">{{ isZh ? '价格依据' : 'Pricing' }}</a>
             </div>
             <div v-if="formatMessageTime(msg)" class="message-time">{{ formatMessageTime(msg) }}</div>
           </div>
@@ -475,7 +482,7 @@
             <a-checkbox value="webhook"><a-icon type="api" /> {{ text.notifyWebhook }}</a-checkbox>
           </a-checkbox-group>
         </a-form-item>
-        <a-alert :message="text.monitorTip" type="info" show-icon />
+        <a-alert :message="text.monitorTip + (isZh ? ' 创建后默认暂停。' : ' New tasks start paused.')" type="info" show-icon />
       </a-form>
     </a-modal>
 
@@ -731,6 +738,7 @@ export default {
       markets: [],
       context: { market: '', symbol: '' },
       selectedSymbolValue: '',
+      skipDefaultWatchSymbol: false,
       watchAddValue: undefined,
       symbolOptions: [],
       symbolSearching: false,
@@ -1163,10 +1171,11 @@ export default {
       const target = this.normalizeSymbolOption(this.context)
       const symbol = (target && target.symbol) || this.i18nText('aiAssetAnalysis.copilot.currentSymbol', 'the current symbol')
       return buildContextualFollowups({
-        isZh: false,
+        isZh: this.isZh,
         target,
         intent: message.meta || message.intent || '',
-        hasReport: !!message.report
+        hasReport: !!message.report,
+        hasStrategyCode: this.isStrategyCodeMessage(message)
       }).map(item => ({
         ...item,
         label: this.i18nText(`aiAssetAnalysis.copilot.followups.${item.key}.label`, item.label, { symbol }),
@@ -1337,6 +1346,9 @@ export default {
     this.applyIncomingCopilotPrompt()
     this.$nextTick(this.resizeComposer)
   },
+  activated () {
+    this.applyIncomingCopilotPrompt()
+  },
   updated () {
     this.scheduleMarkdownCharts()
   },
@@ -1351,6 +1363,12 @@ export default {
   methods: {
     applyIncomingCopilotPrompt () {
       const query = (this.$route && this.$route.query) || {}
+      if (query.scope === 'watchlist' || query.scope === 'unbound') {
+        this.context = { market: '', symbol: '' }
+        this.selectedSymbolValue = ''
+        this.draftContextLock = null
+        this.skipDefaultWatchSymbol = true
+      }
       let prompt = ''
       const key = String(query.copilotPromptKey || '')
       if (key && key.startsWith('qd_copilot_') && typeof sessionStorage !== 'undefined') {
@@ -1383,6 +1401,7 @@ export default {
       const nextQuery = { ...query }
       delete nextQuery.copilotPrompt
       delete nextQuery.copilotPromptKey
+      delete nextQuery.scope
       if (this.$router) this.$router.replace({ path: this.$route.path, query: nextQuery }).catch(() => {})
     },
     quickTaskPromptKey (id) {
@@ -1718,7 +1737,7 @@ export default {
       }
     },
     applyDefaultWatchSymbol () {
-      if (this.selectedSymbolValue || this.context.symbol || this.draftContextLock) return
+      if (this.skipDefaultWatchSymbol || this.selectedSymbolValue || this.context.symbol || this.draftContextLock) return
       const first = (this.watchlist || [])[0]
       if (!first) return
       this.context.market = first.market || this.context.market || firstMarketValue(this.markets)
@@ -1995,7 +2014,7 @@ export default {
       })
     },
     useFollowupPrompt (item) {
-      if (!item || !item.prompt) return
+      if (!item || !item.prompt || this.sending) return
       this.activeResearchMode = item.mode || this.activeResearchMode
       this.recordCopilotEvent('followup_used', item.key, {
         source: 'followup',
@@ -2005,6 +2024,7 @@ export default {
       this.usePrompt(item.prompt, {
         ...(this.normalizeSymbolOption(this.context) ? { contextLock: this.context } : {})
       })
+      this.$nextTick(() => this.sendMessage())
     },
     async loadSavedPrompts () {
       this.loadingSavedPrompts = true
@@ -2476,7 +2496,41 @@ export default {
     },
     visibleMessageActions (msg) {
       const actions = Array.isArray(msg && msg.actions) ? msg.actions : []
-      return actions.filter(action => action && !['generate_code', 'agent_usage'].includes(action.type))
+      return actions.filter(action => action && !['generate_code', 'agent_usage', 'llm_usage'].includes(action.type))
+    },
+    llmUsageForMessage (msg) {
+      const actions = Array.isArray(msg && msg.actions) ? msg.actions : []
+      const action = actions.find(item => item && item.type === 'llm_usage')
+      return action && action.payload && Number.isFinite(Number(action.payload.total_tokens)) ? action.payload : null
+    },
+    llmUsageText (msg) {
+      const usage = this.llmUsageForMessage(msg)
+      if (!usage) return ''
+      const tokens = Number(usage.total_tokens || 0).toLocaleString()
+      const prefix = usage.token_source === 'provider' ? '' : (this.isZh ? '约 ' : '~')
+      const model = [usage.provider, usage.model].filter(Boolean).join(' · ')
+      const cost = usage.estimated_cost == null
+        ? (this.isZh ? '费用暂无报价' : 'cost unavailable')
+        : `${this.isZh ? '预估' : 'est.'} ${usage.currency === 'CNY' ? '¥' : '$'}${Number(usage.estimated_cost).toFixed(6)}`
+      return `${model ? `${model} · ` : ''}${prefix}${tokens} tokens (${Number(usage.input_tokens || 0)} ↑ / ${Number(usage.output_tokens || 0)} ↓) · ${cost}`
+    },
+    isStrategyCodeMessage (msg) {
+      if (!msg || msg.role !== 'assistant') return false
+      const code = this.strategyCodeForMessage(msg)
+      if (!code || code.length > 200000) return false
+      const marker = `${msg.intent || ''} ${msg.meta || ''} ${msg.content || ''}`.toLowerCase()
+      return /strategy_build|strategy api v2|策略源码|策略草稿/.test(marker) && /\bdef\s+(initialize|handle_data)\s*\(/.test(code)
+    },
+    reviewStrategyCode (msg) {
+      if (!this.isStrategyCodeMessage(msg)) return
+      try {
+        sessionStorage.setItem('qd_strategy_source', this.strategyCodeForMessage(msg))
+        sessionStorage.setItem('qd_copilot_script_strategy_meta', JSON.stringify(this.inferScriptDraftMetaFromMessage(msg)))
+      } catch (_) {
+        this.$message.error(this.isZh ? '浏览器暂存失败，无法传递策略代码。' : 'Could not transfer draft code in this browser.')
+        return
+      }
+      this.$router.push({ path: '/strategy-ide', query: { tab: 'script', draft: '1', copilotBacktest: '1' } })
     },
     messageActionLabel (action) {
       const type = String((action && action.type) || '')
@@ -2803,7 +2857,7 @@ export default {
             language: this.$store && this.$store.getters ? (this.$store.getters.lang || 'zh-CN') : (this.$i18n ? this.$i18n.locale : 'zh-CN')
           },
           notification_config: { channels },
-          is_active: true
+          is_active: false
         })
         if (!res || res.code === 0) throw new Error((res && res.msg) || this.text.monitorCreated)
         this.$message.success(this.text.monitorCreated)
@@ -2820,7 +2874,7 @@ export default {
               interval: this.formatIntervalText(interval),
               notification: channels.length ? channels.map(channel => this.monitorChannelLabel(channel)).join(', ') : this.i18nText('aiAssetAnalysis.copilot.monitorNoNotify', 'record only')
             }
-          ),
+          ) + (this.isZh ? '\n\n任务默认暂停；请在「任务中心」确认后启用。' : '\n\nThis task starts paused. Review and enable it in Task Center.'),
           meta: this.i18nText('aiAssetAnalysis.copilot.monitorCreatedMeta', 'task created'),
           created_at: new Date().toISOString()
         }
@@ -3911,6 +3965,9 @@ export default {
           },
           query: { tab: 'script', draft: '1' }
         }]
+        if (res && res.data && res.data.llm_usage) {
+          assistantMsg.actions.push({ key: 'llm-usage', type: 'llm_usage', payload: res.data.llm_usage })
+        }
         await this.persistCopilotMessage(assistantMsg, 'strategy_build')
       } catch (e) {
         console.warn('Script strategy generation failed', e)
@@ -3954,7 +4011,7 @@ export default {
             language: this.$store && this.$store.getters ? (this.$store.getters.lang || 'zh-CN') : (this.$i18n ? this.$i18n.locale : 'zh-CN')
           },
           notification_config: { channels },
-          is_active: true
+          is_active: false
         })
         if (!res || res.code === 0) throw new Error((res && res.msg) || this.text.monitorCreated)
         this.$message.success(this.text.monitorCreated)
@@ -4449,8 +4506,9 @@ export default {
     },
     setAgentUsageActions (message, actions = [], usage = null) {
       if (!message) return
-      const current = (Array.isArray(message.actions) ? message.actions : []).filter(action => action && action.type !== 'agent_usage')
+      const current = (Array.isArray(message.actions) ? message.actions : []).filter(action => action && !['agent_usage', 'llm_usage'].includes(action.type))
       let usageAction = (Array.isArray(actions) ? actions : []).find(action => action && action.type === 'agent_usage')
+      const llmUsageAction = (Array.isArray(actions) ? actions : []).find(action => action && action.type === 'llm_usage')
       if (!usageAction && usage) {
         usageAction = {
           key: 'agent-usage',
@@ -4460,7 +4518,7 @@ export default {
           payload: usage
         }
       }
-      message.actions = usageAction ? [usageAction, ...current] : current
+      message.actions = [usageAction, llmUsageAction, ...current].filter(Boolean)
     },
     getAccessToken () {
       return storage.get(ACCESS_TOKEN) || storage.get('Authorization') || storage.get('token') || ''
@@ -6193,6 +6251,24 @@ export default {
   background: var(--qd-accent-ring);
   transform: translateY(-1px);
 }
+
+.message-actions .message-primary-action {
+  background: var(--qd-accent);
+  border-color: var(--qd-accent);
+  color: #fff;
+}
+
+.message-llm-usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--qd-text-subtle);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.message-llm-usage a { color: inherit; text-decoration: underline; }
 
 .attachment-row,
 .pending-attachments {
@@ -8598,6 +8674,14 @@ body.realdark .copilot-workbench .message-actions button:hover,
   border-color: rgba(82, 196, 26, 0.5) !important;
   background: rgba(82, 196, 26, 0.13) !important;
   color: #c2ef9f !important;
+}
+
+body.dark .copilot-workbench .message-actions button.message-primary-action,
+body.realdark .copilot-workbench .message-actions button.message-primary-action,
+.theme-dark .copilot-workbench .message-actions button.message-primary-action {
+  border-color: #52c41a !important;
+  background: #308d2c !important;
+  color: #fff !important;
 }
 
 body.dark .followup-suggestions,

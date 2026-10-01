@@ -95,7 +95,26 @@ test('Futu connection requires typing the exact probed account ID', () => {
   assert.equal(state.confirmedAccountId, '')
 })
 
+test('Futu HK connect confirms one selected paper account without a separate save action', () => {
+  const file = 'views/broker-accounts/components/forms/FutuConnectForm.vue'
+  const source = fs.readFileSync(new URL('../../src/' + file, import.meta.url), 'utf8')
+  const component = options(file)
+  const emitted = []
+  const state = {
+    ...component.data(), tradeMarket: 'HK', accountId: 12345,
+    confirmedAccountId: '12345', accountConfirmed: true,
+    $emit: (...args) => emitted.push(args)
+  }
+  state.payload = component.methods.payload.bind(state)
+  component.methods.submit.call(state)
+  assert.equal(emitted[0][1].trade_market, 'HK')
+  assert.equal(emitted[0][1].market_category, 'HKStock')
+  assert.equal(emitted[0][1].confirm_acc_id, '12345')
+  assert.equal(source.includes('futuPaper.saveCredential'), false)
+})
+
 test('Futu automation remains separate from a connected diagnostic session', () => {
+  const source = fs.readFileSync(new URL('../../src/views/broker-accounts/components/FutuAutomationControls.vue', import.meta.url), 'utf8')
   const component = options('views/broker-accounts/components/FutuAutomationControls.vue')
   const state = {
     status: { connected: true, accountId: 12345, raw: { automation: [], automation_hard_switch: true } }
@@ -106,6 +125,31 @@ test('Futu automation remains separate from a connected diagnostic session', () 
   assert.equal(state.connected, true)
   assert.equal(state.state, 'paused')
   assert.equal(state.accountId, 12345)
+  assert.match(source, /connected && raw\.credential_id/)
   state.status.raw.automation = [{ acc_id: 12345, state: 'unconfirmed', enabled: false }]
   assert.equal(state.state, 'unconfirmed')
+})
+
+test('Agent policy follows the selected HK or US Futu credential market', async () => {
+  const component = options('views/agent-tokens/AgentTradeIntents.vue')
+  const warnings = []
+  const state = {
+    selectedAccount: 'futu:7',
+    futuCredentials: [{ id: 7, api_key_hint: 'host:11112 (demo/HK)' }],
+    enableText: 'PAPER_AUTO',
+    $t: key => key,
+    $message: { warning: message => warnings.push(message) }
+  }
+  for (const [name, getter] of Object.entries(component.computed)) {
+    Object.defineProperty(state, name, { get: () => getter.call(state) })
+  }
+  assert.equal(state.selectedMarketCategory, 'HKStock')
+  assert.equal(state.quoteCurrency, 'HKD')
+  state.futuCredentials[0].api_key_hint = 'host:11112 (demo/US)'
+  assert.equal(state.selectedMarketCategory, 'USStock')
+  assert.equal(state.quoteCurrency, 'USD')
+  state.futuCredentials[0].api_key_hint = 'unknown'
+  assert.equal(state.selectedMarketCategory, '')
+  await component.methods.changeMode.call(state, 'PAPER_AUTO')
+  assert.deepEqual(warnings, ['agentTrade.marketUnknown'])
 })

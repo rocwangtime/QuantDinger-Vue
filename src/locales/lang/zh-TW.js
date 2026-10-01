@@ -3613,6 +3613,7 @@ const locale = {
   "menu.billing": "會員儲值",
   "menu.dashboard": "儀表板",
   "menu.dashboard.aiAssetAnalysis": "AI 智能分析",
+  "menu.dashboard.agentTaskCenter": "任務中心",
   "menu.dashboard.aiQuant": "AI 量化",
   "menu.dashboard.aiTradingAssistant": "AI交易助理",
   "menu.dashboard.analysis": "AI 分析",

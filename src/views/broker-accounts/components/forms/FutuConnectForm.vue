@@ -2,7 +2,15 @@
   <a-form layout="vertical" class="futu-connect-form">
     <a-alert type="info" show-icon :message="$t('futuPaper.simulateOnly')" class="futu-note" />
     <a-row :gutter="12">
-      <a-col :xs="24" :md="12">
+      <a-col :xs="24" :md="6">
+        <a-form-item :label="$t('futuPaper.market')">
+          <a-select v-model="tradeMarket" :disabled="disabled || loading">
+            <a-select-option value="US">{{ $t('futuPaper.marketUS') }}</a-select-option>
+            <a-select-option value="HK">{{ $t('futuPaper.marketHK') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="6">
         <a-form-item :label="$t('futuPaper.host')">
           <a-input v-model.trim="host" :disabled="disabled || loading" placeholder="host.docker.internal" />
         </a-form-item>
@@ -29,7 +37,7 @@
     <a-form-item :label="$t('futuPaper.accountId')">
       <a-select v-model="accountId" :disabled="disabled || loading || !accounts.length" :placeholder="$t('futuPaper.selectAfterProbe')" @change="onAccountChange">
         <a-select-option v-for="account in accounts" :key="account.acc_id" :value="Number(account.acc_id)">
-          {{ account.acc_id }} · US · SIMULATE
+          {{ account.acc_id }} · {{ tradeMarket }} · SIMULATE
         </a-select-option>
       </a-select>
     </a-form-item>
@@ -37,24 +45,17 @@
       <a-input v-model.trim="confirmedAccountId" :disabled="disabled || loading || !accountId" :placeholder="$t('futuPaper.confirmAccountIdHint')" />
     </a-form-item>
     <a-alert v-if="probed && !accounts.length" type="warning" show-icon :message="$t('futuPaper.noUsSimAccount')" class="futu-note" />
-    <a-form-item :label="$t('futuPaper.credentialName')">
-      <a-input v-model.trim="credentialName" :disabled="disabled || loading" />
-    </a-form-item>
+    <a-alert type="info" show-icon :message="$t('futuPaper.autoSaveHint')" class="futu-note" />
     <div class="futu-actions">
-      <a-button :loading="saving" :disabled="disabled || !accountConfirmed || !!savedCredentialId" @click="saveCredential">
-        {{ $t('futuPaper.saveCredential') }}
-      </a-button>
       <a-button type="primary" :loading="loading" :disabled="disabled || !accountConfirmed" @click="submit">
         {{ $t('brokerAccounts.connect') }}
       </a-button>
     </div>
-    <a-alert v-if="savedCredentialId" type="success" show-icon :message="$t('futuPaper.savedCredential', { id: savedCredentialId })" />
   </a-form>
 </template>
 
 <script>
 import { broker } from '@/api/broker'
-import { createExchangeCredential } from '@/api/credentials'
 
 export default {
   name: 'FutuConnectForm',
@@ -66,15 +67,13 @@ export default {
     return {
       host: 'host.docker.internal',
       port: 11112,
+      tradeMarket: 'US',
       securityFirm: 'FUTUSECURITIES',
       accountId: null,
       confirmedAccountId: '',
       accounts: [],
       probing: false,
-      probed: false,
-      credentialName: 'Futu US SIMULATE',
-      saving: false,
-      savedCredentialId: null
+      probed: false
     }
   },
   computed: {
@@ -85,19 +84,18 @@ export default {
   watch: {
     host () { this.resetProbe() },
     port () { this.resetProbe() },
+    tradeMarket () { this.resetProbe() },
     securityFirm () { this.resetProbe() }
   },
   methods: {
     onAccountChange () {
       this.confirmedAccountId = ''
-      this.savedCredentialId = null
     },
     resetProbe () {
       this.accounts = []
       this.accountId = null
       this.confirmedAccountId = ''
       this.probed = false
-      this.savedCredentialId = null
     },
     payload (accountId = 0) {
       return {
@@ -105,7 +103,8 @@ export default {
         port: Number(this.port),
         security_firm: this.securityFirm,
         trade_env: 'demo',
-        trade_market: 'US',
+        trade_market: this.tradeMarket,
+        market_category: this.tradeMarket === 'US' ? 'USStock' : 'HKStock',
         acc_id: Number(accountId)
       }
     },
@@ -114,7 +113,6 @@ export default {
       this.probed = false
       this.accountId = null
       this.confirmedAccountId = ''
-      this.savedCredentialId = null
       try {
         const response = await broker.futu.probe(this.payload())
         const body = response && (response.data || response)
@@ -124,7 +122,9 @@ export default {
         this.accounts = listed.filter(account => {
           const environment = String(account.trd_env || '').toUpperCase()
           const auth = String(account.trdmarket_auth || '').toUpperCase()
-          return environment.includes('SIMULATE') && (!auth || auth.includes('US'))
+          const type = String(account.sim_acc_type || '').toUpperCase()
+          const stockAccount = this.tradeMarket === 'HK' ? type === 'STOCK' : ['STOCK', 'STOCK_AND_OPTION'].includes(type)
+          return environment.includes('SIMULATE') && auth.includes(this.tradeMarket) && stockAccount
         })
         this.probed = true
       } catch (error) {
@@ -136,28 +136,7 @@ export default {
     },
     submit () {
       if (!this.accountConfirmed) return
-      this.$emit('submit', this.payload(this.accountId))
-    },
-    async saveCredential () {
-      if (!this.accountConfirmed || this.savedCredentialId) return
-      this.saving = true
-      try {
-        const response = await createExchangeCredential({
-          ...this.payload(this.accountId),
-          exchange_id: 'futu',
-          market_category: 'USStock',
-          name: this.credentialName || 'Futu US SIMULATE'
-        })
-        if (!response || response.code !== 1 || !response.data || !response.data.id) {
-          throw new Error((response && response.msg) || this.$t('futuPaper.saveFailed'))
-        }
-        this.savedCredentialId = response.data.id
-        this.$emit('saved', this.savedCredentialId)
-      } catch (error) {
-        this.$message.error((error && error.message) || this.$t('futuPaper.saveFailed'))
-      } finally {
-        this.saving = false
-      }
+      this.$emit('submit', { ...this.payload(this.accountId), confirm_acc_id: this.confirmedAccountId })
     }
   }
 }
