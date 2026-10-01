@@ -21,6 +21,8 @@ test('a generated strategy can be handed to validation and backtest without copy
   assert.match(copilot, /sessionStorage\.setItem\('qd_strategy_source'/)
   assert.match(copilot, /copilotBacktest: '1'/)
   assert.match(editor, /if \(await this\.verifyScriptCode\(\)\) this\.openBacktestCenter\(\)/)
+  assert.match(editor, /activated \(\) \{[\s\S]*?this\.resumeCopilotBacktest\(\)/)
+  assert.match(editor, /async resumeCopilotBacktest \(\) \{[\s\S]*?this\.hasCopilotScriptDraft\(\)/)
   assert.match(copilot, /type === 'llm_usage'/)
   assert.doesNotMatch(copilot, /reviewStrategyCode \(msg\)[\s\S]*?startStrategy\(/)
 })

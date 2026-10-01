@@ -1041,6 +1041,7 @@ export default {
       window.addEventListener('keydown', this._saveShortcut, true)
     }
     this.applyStrategyRouteSource()
+    this.resumeCopilotBacktest()
     this.initializeStrategyBuilderOptions()
   },
   deactivated () {
@@ -1623,6 +1624,14 @@ export default {
       const sourceId = this.getInitialRouteSourceId()
       if (!sourceId || String(this.currentSourceId || '') === sourceId) return
       await this.openSource(sourceId, { updateRoute: false })
+    },
+    async resumeCopilotBacktest () {
+      if (this._initialPagePromise) await this._initialPagePromise
+      if (String((this.$route.query || {}).copilotBacktest || '') !== '1' || !this.hasCopilotScriptDraft()) return
+      this.createNewDraft({ openTemplate: false, updateRoute: false, assetType: 'script' })
+      this.applyCopilotScriptDraft()
+      await this.$nextTick()
+      if (await this.verifyScriptCode()) this.openBacktestCenter()
     },
     getRouteAssetType () {
       const query = this.$route.query || {}
