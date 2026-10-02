@@ -20,6 +20,7 @@
       >
         <a-button slot="action" size="small" :loading="aiStrategyGenerating" @click="repairCopilotScript">{{ aiStrategyQuickPrompts[3].label }}</a-button>
       </a-alert>
+      <a-alert v-if="researchOrigin && researchOrigin.run_id" class="research-origin-alert" type="info" show-icon :message="researchOriginMessage" />
       <section class="script-panel script-panel--editor">
         <strategy-editor
           ref="scriptEditor"
@@ -727,6 +728,7 @@ export default {
       editorKeySeed: 0,
       scriptVerified: false,
       scriptValidationError: '',
+      researchOrigin: null,
       copilotRepairToBacktest: false,
       savingScript: false,
       savingScriptMode: '',
@@ -908,6 +910,15 @@ export default {
       if (this.scriptCodeHidden) return false
       if (!this.currentSourceId) return !!String(this.scriptCode || '').trim()
       return this.lastSavedSnapshot !== this.scriptSnapshot()
+    },
+    researchOriginMessage () {
+      if (!this.researchOrigin) return ''
+      const isZh = String((this.$i18n && this.$i18n.locale) || '').toLowerCase().startsWith('zh')
+      const run = `#${this.researchOrigin.run_id}`
+      const observed = String(this.researchOrigin.observed_at || '').replace('T', ' ').slice(0, 19)
+      return isZh
+        ? `来源：定时研究记录 ${run}（${observed}）。历史研究结论不是当前行情或交易授权。`
+        : `Source: scheduled research run ${run} (${observed}). Historical research is not current market data or trading authorization.`
     },
     text () {
       return [
@@ -1703,6 +1714,7 @@ export default {
       this.selectedScriptId = undefined
       this.scriptCodeHidden = false
       this.scriptCode = code
+      this.researchOrigin = meta.research_origin && typeof meta.research_origin === 'object' ? meta.research_origin : null
       this.scriptTemplateKey = ''
       this.scriptTemplateParams = {}
       this.scriptParamSchema = {}
@@ -1753,6 +1765,7 @@ export default {
     },
     applySource (source) {
       const metadata = this.parseObject(source.metadata)
+      this.researchOrigin = metadata.research_origin && typeof metadata.research_origin === 'object' ? metadata.research_origin : null
       const runConfig = this.parseObject(metadata.last_run_config)
       const inferredRunConfig = extractStrategyRuntimeContractFromCode(source.code || '').config
       this.currentSource = source
@@ -1797,6 +1810,7 @@ export default {
       this.selectedScriptId = undefined
       this.currentAssetType = assetType === 'portfolio_strategy' ? 'portfolio_strategy' : 'script'
       this.scriptCode = EMPTY_DRAFT_CODE
+      this.researchOrigin = null
       this.scriptCodeHidden = false
       this.scriptTemplateKey = ''
       this.scriptTemplateParams = {}
@@ -2099,7 +2113,8 @@ export default {
           last_run_config: this.buildTradingConfig(),
           script_template_params: { ...this.scriptTemplateParams },
           lifecycle_verified: this.scriptVerified,
-          script_verified: this.scriptVerified
+          script_verified: this.scriptVerified,
+          ...(this.researchOrigin ? { research_origin: { ...this.researchOrigin } } : {})
         }
       }
     },
@@ -2834,6 +2849,11 @@ export default {
   margin-bottom: 10px;
   overflow-y: auto;
   white-space: pre-wrap;
+}
+
+.research-origin-alert {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
 }
 
 .strategy-ide-layout {

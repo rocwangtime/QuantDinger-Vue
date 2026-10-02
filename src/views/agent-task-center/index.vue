@@ -68,7 +68,7 @@
           <div class="section-heading"><div><h2>{{ copy.developmentTitle }}</h2><p>{{ copy.developmentHint }}</p></div></div>
           <div v-if="!scriptSources.length && !backtests.length" class="task-empty">{{ copy.noDrafts }}</div>
           <div v-for="source in scriptSources.slice(0, 4)" :key="`source-${source.id}`" class="strategy-row">
-            <div><strong>{{ source.name || source.strategy_name || `#${source.id}` }}</strong><small>{{ copy.sourceDraft }}</small></div>
+            <div><strong>{{ source.name || source.strategy_name || `#${source.id}` }}</strong><small>{{ copy.sourceDraft }}<template v-if="sourceOrigin(source)"> · {{ copy.researchSource }} #{{ sourceOrigin(source).run_id }}</template></small></div>
             <div class="task-row-actions"><a-button size="small" type="link" @click="openSource(source.id)">{{ copy.edit }} →</a-button><a-button size="small" type="link" @click="openBacktest(source.id)">{{ copy.backtest }} →</a-button></div>
           </div>
           <div v-for="run in backtests.slice(0, 3)" :key="`backtest-${run.id}`" class="strategy-row">
@@ -121,8 +121,10 @@
           <p v-if="run.result && run.result.error">{{ run.result.error }}</p>
           <p v-else-if="run.result">{{ copy.analyzed }} {{ run.result.analyzed_count || 0 }} / {{ run.result.position_count || 0 }}</p>
           <div v-for="item in ((run.result && run.result.position_analyses) || [])" :key="`${item.market}:${item.symbol}`" class="task-run-symbol">
-            <strong>{{ item.market }}:{{ item.symbol }}</strong>
-            <span>{{ item.error || item.final_decision || copy.noResult }}</span>
+            <div><strong>{{ item.market }}:{{ item.symbol }}</strong><small>{{ item.error || item.final_decision || copy.noResult }}<template v-if="item.confidence != null && !item.error"> · {{ item.confidence }}%</template></small></div>
+            <a-popconfirm v-if="candidateFor(run, item)" :title="copy.candidateConfirm" :ok-text="copy.generateCandidate" :cancel-text="copy.cancel" @confirm="generateCandidate(run, item)">
+              <a-button size="small" type="link" :loading="candidateLoadingKey === `${run.id}:${item.market}:${item.symbol}`">{{ copy.generateCandidate }} →</a-button>
+            </a-popconfirm>
           </div>
         </div>
       </a-spin>
@@ -134,21 +136,22 @@
 import { mapState } from 'vuex'
 import { getMonitors, getMonitorRuns, addMonitor, updateMonitor } from '@/api/portfolio'
 import { getWatchlist } from '@/api/market'
-import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory } from '@/api/strategy'
+import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory, aiGenerateStrategy } from '@/api/strategy'
+import { researchCandidateFromRun, buildResearchStrategyPrompt } from './researchCandidate'
 
 const words = {
   zh: {
-    eyebrow: 'AGENT 工作台', title: '任务中心', subtitle: '从机会发现到模拟运行，查看任务状态并决定下一步。', refresh: '刷新', loadError: '部分任务数据未能加载，请刷新后核对。', statusTitle: '任务状态', activeResearch: '运行中的定时研究', pausedResearch: '已暂停的定时研究', runningStrategies: '运行中的策略', safetySummary: '研究任务不会下单；交易权限在账户与策略运行中独立控制。', startTitle: '开始一项工作', startHint: '选择目标，Agent 的产物会引导你进入下一阶段。', discover: '挖掘机会', discoverDesc: '从观察范围筛选值得进一步研究的标的', research: '研究标的', researchDesc: '追问行情、事件、风险与数据依据', build: '开发策略', buildDesc: '把想法写成可回测的策略草稿', review: '运行与复盘', reviewDesc: '检查策略状态、订单和交易记录', openResearch: '打开 AI 投研', openRuntime: '打开策略运行', developmentTitle: '策略开发进度', developmentHint: '草稿校验、回测与运行各有独立记录。', noDrafts: '暂无策略草稿或回测记录。', sourceDraft: '已保存的策略源码', edit: '编辑', backtest: '回测', backtestRecord: '历史回测', reviewBacktest: '查看', monitorTitle: '定时研究任务', monitorHint: '按固定间隔分析观察名单中的标的；事件触发暂未接入。', createMonitor: '新建定时研究', monitorBoundary: '这里只进行 AI 分析与通知，不会产生交易订单。', noMonitors: '暂无定时研究任务。', active: '运行中', paused: '已暂停', every: '每', runs: '已运行', lastRun: '上次运行', nextRun: '下次计划', pause: '暂停', enable: '启用', enableConfirm: '启用后系统将按计划自动分析，可能消耗 AI 额度；确认启用？', cancel: '取消', never: '尚未运行', noResult: '暂无结果', success: '完成', skipped: '跳过', failed: '失败', runHistory: '运行记录', runsBoundary: '这些记录只表示研究分析，不代表交易指令或成交。', noRuns: '暂无运行记录', analyzed: '已分析', universeTitle: '观察范围', universeHint: '作为机会筛选和定时研究的输入。', noWatchlist: '观察名单为空。先到 AI 投研添加标的。', manageUniverse: '管理观察名单', executionTitle: '策略运行', executionHint: '与定时研究分开管理。', noStrategies: '暂无策略运行记录。', details: '详情', allStrategies: '查看全部策略', manageAccounts: '管理模拟账户与授权', executionBoundary: '模拟账户选择、交易授权、风控和暂停操作均在账户及策略运行页面完成。', createPaused: '创建为暂停', target: '观察标的', chooseTarget: '从观察名单选择', interval: '分析间隔', hour: '小时', hours: '小时', day: '天', createBoundary: '新任务默认暂停。这里只支持固定间隔研究，不支持事件触发或自动下单。', created: '定时研究任务已创建（暂停）', updated: '任务状态已更新', actionError: '操作失败，请重试。'
+    eyebrow: 'AGENT 工作台', title: '任务中心', subtitle: '从机会发现到模拟运行，查看任务状态并决定下一步。', refresh: '刷新', loadError: '部分任务数据未能加载，请刷新后核对。', statusTitle: '任务状态', activeResearch: '运行中的定时研究', pausedResearch: '已暂停的定时研究', runningStrategies: '运行中的策略', safetySummary: '研究任务不会下单；交易权限在账户与策略运行中独立控制。', startTitle: '开始一项工作', startHint: '选择目标，Agent 的产物会引导你进入下一阶段。', discover: '挖掘机会', discoverDesc: '从观察范围筛选值得进一步研究的标的', research: '研究标的', researchDesc: '追问行情、事件、风险与数据依据', build: '开发策略', buildDesc: '把想法写成可回测的策略草稿', review: '运行与复盘', reviewDesc: '检查策略状态、订单和交易记录', openResearch: '打开 AI 投研', openRuntime: '打开策略运行', developmentTitle: '策略开发进度', developmentHint: '草稿校验、回测与运行各有独立记录。', noDrafts: '暂无策略草稿或回测记录。', sourceDraft: '已保存的策略源码', researchSource: '来自定时研究记录', edit: '编辑', backtest: '回测', backtestRecord: '历史回测', reviewBacktest: '查看', monitorTitle: '定时研究任务', monitorHint: '按固定间隔分析观察名单中的标的；事件触发暂未接入。', createMonitor: '新建定时研究', monitorBoundary: '这里只进行 AI 分析与通知，不会产生交易订单。', noMonitors: '暂无定时研究任务。', active: '运行中', paused: '已暂停', every: '每', runs: '已运行', lastRun: '上次运行', nextRun: '下次计划', pause: '暂停', enable: '启用', enableConfirm: '启用后系统将按计划自动分析，可能消耗 AI 额度；确认启用？', cancel: '取消', never: '尚未运行', noResult: '暂无结果', success: '完成', skipped: '跳过', failed: '失败', runHistory: '运行记录', runsBoundary: '这些记录只表示研究分析，不代表交易指令或成交。', noRuns: '暂无运行记录', analyzed: '已分析', generateCandidate: '生成策略候选', candidateConfirm: '将使用本次历史研究结果调用 AI 生成并校验策略，可能消耗额度；只进入回测准备，不会下单。继续？', candidateFailed: '策略候选生成失败', universeTitle: '观察范围', universeHint: '作为机会筛选和定时研究的输入。', noWatchlist: '观察名单为空。先到 AI 投研添加标的。', manageUniverse: '管理观察名单', executionTitle: '策略运行', executionHint: '与定时研究分开管理。', noStrategies: '暂无策略运行记录。', details: '详情', allStrategies: '查看全部策略', manageAccounts: '管理模拟账户与授权', executionBoundary: '模拟账户选择、交易授权、风控和暂停操作均在账户及策略运行页面完成。', createPaused: '创建为暂停', target: '观察标的', chooseTarget: '从观察名单选择', interval: '分析间隔', hour: '小时', hours: '小时', day: '天', createBoundary: '新任务默认暂停。这里只支持固定间隔研究，不支持事件触发或自动下单。', created: '定时研究任务已创建（暂停）', updated: '任务状态已更新', actionError: '操作失败，请重试。'
   },
   en: {
-    eyebrow: 'AGENT WORKSPACE', title: 'Task Center', subtitle: 'Track work from opportunity discovery to paper execution and choose the next step.', refresh: 'Refresh', loadError: 'Some task data could not be loaded. Refresh to verify.', statusTitle: 'Task status', activeResearch: 'Active research schedules', pausedResearch: 'Paused research schedules', runningStrategies: 'Running strategies', safetySummary: 'Research schedules never place orders. Trading authorization is managed separately.', startTitle: 'Start work', startHint: 'Choose an outcome and continue through the resulting workflow.', discover: 'Discover opportunities', discoverDesc: 'Screen your watchlist for research candidates', research: 'Research a symbol', researchDesc: 'Examine market data, events, risks and evidence', build: 'Develop a strategy', buildDesc: 'Turn an idea into a backtestable draft', review: 'Run and review', reviewDesc: 'Inspect strategy status, orders and fills', openResearch: 'Open AI Research', openRuntime: 'Open Strategy Run', developmentTitle: 'Strategy development', developmentHint: 'Draft validation, backtests and runs have separate records.', noDrafts: 'No saved drafts or backtests yet.', sourceDraft: 'Saved strategy source', edit: 'Edit', backtest: 'Backtest', backtestRecord: 'Past backtest', reviewBacktest: 'Open', monitorTitle: 'Scheduled research', monitorHint: 'Analyze watchlist symbols at fixed intervals; event triggers are not yet available.', createMonitor: 'New research schedule', monitorBoundary: 'These tasks only analyze and notify; they never place orders.', noMonitors: 'No scheduled research tasks yet.', active: 'Active', paused: 'Paused', every: 'Every', runs: 'Runs', lastRun: 'Last run', nextRun: 'Next planned', pause: 'Pause', enable: 'Enable', enableConfirm: 'This task may consume AI credits when scheduled. Enable it?', cancel: 'Cancel', never: 'Never', noResult: 'No result', success: 'Completed', skipped: 'Skipped', failed: 'Failed', runHistory: 'Run history', runsBoundary: 'Research records are not trading instructions or fills.', noRuns: 'No runs yet', analyzed: 'Analyzed', universeTitle: 'Observation universe', universeHint: 'Input for discovery and scheduled research.', noWatchlist: 'Your watchlist is empty. Add a symbol in AI Research.', manageUniverse: 'Manage watchlist', executionTitle: 'Strategy run', executionHint: 'Managed separately from research schedules.', noStrategies: 'No strategy runs yet.', details: 'Details', allStrategies: 'View all strategies', manageAccounts: 'Manage paper accounts and authorization', executionBoundary: 'Paper account selection, authorization, risk limits and pausing are managed in Accounts and Strategy Run.', createPaused: 'Create paused', target: 'Watchlist symbol', chooseTarget: 'Select from watchlist', interval: 'Analysis interval', hour: 'hour', hours: 'hours', day: 'day', createBoundary: 'New tasks start paused. Only fixed-interval research is supported here; no event trigger or order execution.', created: 'Research schedule created (paused)', updated: 'Task status updated', actionError: 'Action failed. Please retry.'
+    eyebrow: 'AGENT WORKSPACE', title: 'Task Center', subtitle: 'Track work from opportunity discovery to paper execution and choose the next step.', refresh: 'Refresh', loadError: 'Some task data could not be loaded. Refresh to verify.', statusTitle: 'Task status', activeResearch: 'Active research schedules', pausedResearch: 'Paused research schedules', runningStrategies: 'Running strategies', safetySummary: 'Research schedules never place orders. Trading authorization is managed separately.', startTitle: 'Start work', startHint: 'Choose an outcome and continue through the resulting workflow.', discover: 'Discover opportunities', discoverDesc: 'Screen your watchlist for research candidates', research: 'Research a symbol', researchDesc: 'Examine market data, events, risks and evidence', build: 'Develop a strategy', buildDesc: 'Turn an idea into a backtestable draft', review: 'Run and review', reviewDesc: 'Inspect strategy status, orders and fills', openResearch: 'Open AI Research', openRuntime: 'Open Strategy Run', developmentTitle: 'Strategy development', developmentHint: 'Draft validation, backtests and runs have separate records.', noDrafts: 'No saved drafts or backtests yet.', sourceDraft: 'Saved strategy source', researchSource: 'From research run', edit: 'Edit', backtest: 'Backtest', backtestRecord: 'Past backtest', reviewBacktest: 'Open', monitorTitle: 'Scheduled research', monitorHint: 'Analyze watchlist symbols at fixed intervals; event triggers are not yet available.', createMonitor: 'New research schedule', monitorBoundary: 'These tasks only analyze and notify; they never place orders.', noMonitors: 'No scheduled research tasks yet.', active: 'Active', paused: 'Paused', every: 'Every', runs: 'Runs', lastRun: 'Last run', nextRun: 'Next planned', pause: 'Pause', enable: 'Enable', enableConfirm: 'This task may consume AI credits when scheduled. Enable it?', cancel: 'Cancel', never: 'Never', noResult: 'No result', success: 'Completed', skipped: 'Skipped', failed: 'Failed', runHistory: 'Run history', runsBoundary: 'Research records are not trading instructions or fills.', noRuns: 'No runs yet', analyzed: 'Analyzed', generateCandidate: 'Generate strategy candidate', candidateConfirm: 'This uses a historical research result to generate and validate code and may consume AI credits. It only prepares a backtest; no orders will be placed. Continue?', candidateFailed: 'Failed to generate strategy candidate', universeTitle: 'Observation universe', universeHint: 'Input for discovery and scheduled research.', noWatchlist: 'Your watchlist is empty. Add a symbol in AI Research.', manageUniverse: 'Manage watchlist', executionTitle: 'Strategy run', executionHint: 'Managed separately from research schedules.', noStrategies: 'No strategy runs yet.', details: 'Details', allStrategies: 'View all strategies', manageAccounts: 'Manage paper accounts and authorization', executionBoundary: 'Paper account selection, authorization, risk limits and pausing are managed in Accounts and Strategy Run.', createPaused: 'Create paused', target: 'Watchlist symbol', chooseTarget: 'Select from watchlist', interval: 'Analysis interval', hour: 'hour', hours: 'hours', day: 'day', createBoundary: 'New tasks start paused. Only fixed-interval research is supported here; no event trigger or order execution.', created: 'Research schedule created (paused)', updated: 'Task status updated', actionError: 'Action failed. Please retry.'
   }
 }
 
 export default {
   name: 'AgentTaskCenter',
   data () {
-    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [] }
+    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '' }
   },
   computed: {
     ...mapState({ navTheme: state => state.app.theme }),
@@ -203,6 +206,48 @@ export default {
       return result.skipped ? this.copy.skipped : result.success ? this.copy.success : this.copy.failed
     },
     runStatus (run) { return this.copy[run.status === 'completed' ? 'success' : run.status] || run.status || this.copy.noResult },
+    sourceOrigin (source) {
+      try {
+        const metadata = typeof source.metadata === 'string' ? JSON.parse(source.metadata) : source.metadata
+        const origin = metadata && metadata.research_origin
+        return origin && Number(origin.run_id) > 0 ? origin : null
+      } catch (_) { return null }
+    },
+    candidateFor (run, item) { return researchCandidateFromRun(run, item) },
+    async generateCandidate (run, item) {
+      const candidate = this.candidateFor(run, item)
+      if (!candidate || this.candidateLoadingKey) return
+      this.candidateLoadingKey = `${run.id}:${item.market}:${item.symbol}`
+      try {
+        const res = await aiGenerateStrategy({
+          prompt: buildResearchStrategyPrompt(candidate, this.copy === words.zh ? 'zh' : 'en'),
+          assetType: 'script',
+          generationMode: 'authoring',
+          existingCode: '',
+          context: { source: 'scheduled_research', instrument: `${candidate.market}:${candidate.symbol}`, timeframe: '1D' }
+        })
+        const data = (res && res.data) || {}
+        if (!(res && res.code === 1 && typeof data.code === 'string' && data.code.trim() && data.validation && data.validation.success)) {
+          throw new Error((res && res.msg) || this.copy.candidateFailed)
+        }
+        sessionStorage.setItem('qd_strategy_source', data.code)
+        sessionStorage.setItem('qd_copilot_script_strategy_meta', JSON.stringify({
+          market: candidate.market,
+          symbol: candidate.symbol,
+          research_origin: {
+            monitor_id: Number(this.selectedMonitor && this.selectedMonitor.id),
+            run_id: Number(run.id),
+            observed_at: candidate.observedAt,
+            decision: candidate.decision,
+            confidence: candidate.confidence
+          }
+        }))
+        this.runsVisible = false
+        await this.$router.push({ path: '/strategy-ide', query: { tab: 'script', draft: '1', copilotBacktest: '1' } })
+      } catch (error) {
+        this.$message.error((error && (error.backendMessage || error.message)) || this.copy.candidateFailed)
+      } finally { this.candidateLoadingKey = '' }
+    },
     async openMonitorRuns (monitor) {
       this.selectedMonitor = monitor
       this.monitorRuns = []
@@ -297,6 +342,7 @@ export default {
 .task-run-heading { display: flex; justify-content: space-between; gap: 10px; }
 .task-run-heading span, .task-run p { color: var(--task-muted); }
 .task-run-symbol { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+.task-run-symbol small { display: block; color: var(--task-muted); }
 .task-row-title { display: flex; align-items: center; gap: 9px; }
 .task-row-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-row-title span { padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
