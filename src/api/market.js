@@ -190,11 +190,12 @@ export function getAgentPreflight (params) {
   })
 }
 
-export function classifyAgentIntent (parameter) {
+export function classifyAgentIntent (parameter, signal) {
   return request({
     url: marketApi.AgentIntent,
     method: 'post',
-    data: parameter
+    data: parameter,
+    signal
   })
 }
 

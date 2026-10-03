@@ -3888,6 +3888,7 @@ const locale = {
   "menu.dashboard": "仪表盘",
   "menu.dashboard.aiAssetAnalysis": "AI投研",
   "menu.dashboard.agentTaskCenter": "任务中心",
+  "menu.dashboard.aiMonitor": "AI 盯盘",
   "menu.dashboard.aiQuant": "AI 量化",
   "menu.dashboard.aiTradingAssistant": "AI交易助手",
   "menu.dashboard.analysis": "AI 分析",

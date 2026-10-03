@@ -576,6 +576,14 @@ export default {
           singleAsItem: true
         },
         {
+          name: 'MenuGroupAIMonitor',
+          path: '/menu-group/ai-monitor',
+          title: this.$t('menu.dashboard.aiMonitor'),
+          icon: 'radar-chart',
+          paths: ['/ai-monitor'],
+          singleAsItem: true
+        },
+        {
           name: 'MenuGroupCommunity',
           path: '/menu-group/indicator-community',
           title: this.$t('menu.dashboard.community') || 'Marketplace',

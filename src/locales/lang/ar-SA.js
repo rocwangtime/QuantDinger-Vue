@@ -3614,6 +3614,7 @@ const locale = {
   "menu.dashboard": "لوحة التحكم",
   "menu.dashboard.aiAssetAnalysis": "تحليل ذكي بالذكاء الاصطناعي",
   "menu.dashboard.agentTaskCenter": "مركز المهام",
+  "menu.dashboard.aiMonitor": "مراقبة الذكاء الاصطناعي",
   "menu.dashboard.aiQuant": "محلل كمي بالذكاء الاصطناعي",
   "menu.dashboard.aiTradingAssistant": "مساعد التداول بالذكاء الاصطناعي",
   "menu.dashboard.analysis": "تحليل الذكاء الاصطناعي",

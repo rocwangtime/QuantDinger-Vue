@@ -30,6 +30,14 @@ test('task center is the default workspace and keeps research and execution sepa
   assert.match(page, /openRuntime \(id\)/)
 })
 
+test('AI monitoring has a distinct entry and does not advertise automatic orders as available', () => {
+  assert.match(router, /path: '\/ai-monitor'/)
+  assert.match(router, /workspaceMode: 'monitor'/)
+  assert.match(layout, /paths: \['\/ai-monitor'\]/)
+  assert.match(page, /新闻热点触发也尚未接入/)
+  assert.match(page, /未联动；不会自动下单/)
+})
+
 test('new research schedules are paused and cannot place an order', () => {
   assert.match(page, /is_active: false/)
   assert.match(page, /monitor_type: 'ai'/)

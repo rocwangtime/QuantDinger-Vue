@@ -133,3 +133,27 @@ test('SSE completion does not wait for billing refresh', async () => {
   assert.equal(completion, true)
   assert.equal(billingRefreshes, 1)
 })
+
+test('stop generation marks partial text and cancels the authenticated stream', async () => {
+  const posted = []
+  let aborted = false
+  const vm = {
+    ...loadMethods(['stopGeneration'], {
+      fetch: async (url, options) => { posted.push({ url, options }); return { ok: true } },
+      ACCESS_TOKEN: 'Access-Token'
+    }),
+    sending: true,
+    generationSequence: 3,
+    activeGenerationRequestId: '6d6271b2-cbb7-44ec-9d1a-8093940ec006',
+    activeGenerationController: { abort () { aborted = true } },
+    activeAssistantMessage: { role: 'assistant', content: 'partial answer', isThinking: false },
+    getAccessToken: () => 'test-token', isZh: true
+  }
+  await vm.stopGeneration()
+  assert.equal(aborted, true)
+  assert.equal(vm.sending, false)
+  assert.equal(vm.generationSequence, 4)
+  assert.match(vm.activeAssistantMessage.streamWarning, /未完成/)
+  assert.equal(posted[0].url, '/api/ai/chat/message/cancel')
+  assert.equal(JSON.parse(posted[0].options.body).request_id, vm.activeGenerationRequestId)
+})

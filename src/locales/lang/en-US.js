@@ -344,6 +344,7 @@ const locale = {
   "menu.dashboard.analysis": "AI Analysis",
   "menu.dashboard.aiAssetAnalysis": "AI Research",
   "menu.dashboard.agentTaskCenter": "Task Center",
+  "menu.dashboard.aiMonitor": "AI Monitoring",
   "menu.dashboard.aiQuant": "AI Quant",
   "menu.dashboard.indicator": "Charts & Indicators",
   "menu.dashboard.community": "Market",

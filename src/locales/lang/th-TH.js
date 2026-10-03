@@ -3614,6 +3614,7 @@ const locale = {
   "menu.dashboard": "แดชบอร์ด",
   "menu.dashboard.aiAssetAnalysis": "วิเคราะห์อัจฉริยะ AI",
   "menu.dashboard.agentTaskCenter": "ศูนย์งาน",
+  "menu.dashboard.aiMonitor": "ติดตามตลาดด้วย AI",
   "menu.dashboard.aiQuant": "AI เชิงปริมาณ",
   "menu.dashboard.aiTradingAssistant": "ผู้ช่วยการซื้อขาย AI",
   "menu.dashboard.analysis": "การวิเคราะห์ AI",
