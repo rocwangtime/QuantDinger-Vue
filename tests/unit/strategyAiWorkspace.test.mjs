@@ -207,7 +207,7 @@ test('indicator conversion displays the underlying localized validation failure'
     aiWorkspaceText: { sendFailed: 'fallback' },
     localizeStrategyAiError: new Function('error', localizeBody)
   }
-  const convert = new Function('aiGenerateStrategy', `return async function () { ${convertBody} }`)(async payload => {
+  const convert = new Function('streamStrategyDraft', `return async function () { ${convertBody} }`)(async payload => {
     assert.equal(payload.context.conversionRequest, 'Add a stop loss')
     throw failure
   })
