@@ -25,9 +25,10 @@ test('stream completion cancels the reader and releases the sending state', () =
 })
 
 test('strategy generation reads artifact code from the API data envelope', () => {
-  assert.match(copilot, /const code = this\.extractStrategyCode\(res\)/)
-  assert.match(copilot, /\[data\.code, data\.source, data\.strategy_code, res\.code\]/)
-  assert.match(copilot, /typeof value === 'string' && value\.trim\(\)/)
+  assert.match(copilot, /const code = validatedStrategyCode\(res\)/)
+  const workflow = read('../../src/utils/researchWorkflow.mjs')
+  assert.match(workflow, /data\.validation\.success !== true/)
+  assert.match(workflow, /return data\.code\.trim\(\)/)
   assert.doesNotMatch(copilot, /sessionStorage\.setItem\('qd_strategy_source', res\.code\)/)
 })
 
