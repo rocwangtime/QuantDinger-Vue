@@ -267,6 +267,7 @@
                     </div>
 
                     <div class="ai-composer">
+                      <AgentModelSelect v-model="llmSelection" remember :disabled="aiGenerating" @ready="modelSelectionReady = $event" />
                       <a-textarea
                         v-model="aiPrompt"
                         class="ai-prompt-input"
@@ -283,7 +284,7 @@
                           class="ai-composer-send"
                           :title="$t('indicatorIde.aiSend')"
                           :loading="aiGenerating"
-                          :disabled="!aiPrompt.trim()"
+                          :disabled="!modelSelectionReady || !aiPrompt.trim()"
                           @click="handleAIGenerate"
                         >
                           <span v-if="!aiGenerating">{{ $t('indicatorIde.aiSend') }}</span>
@@ -1134,6 +1135,7 @@
 </template>
 
 <script>
+import AgentModelSelect from '@/components/AgentModelSelect.vue'
 import CodeMirror from 'codemirror'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/mode/python/python'
@@ -1203,7 +1205,7 @@ function chartTypeStorageKey (userId) {
 export default {
   name: 'IndicatorIDE',
   mixins: [baseMixin],
-  components: { KlineChart, QuickTradePanel, IndicatorMarketPicker },
+  components: { AgentModelSelect, KlineChart, QuickTradePanel, IndicatorMarketPicker },
   data () {
     return {
       userId: null,
@@ -1280,6 +1282,8 @@ export default {
       // AI generation
       aiPanelExpanded: true,
       aiPrompt: '',
+      llmSelection: {},
+      modelSelectionReady: false,
       aiInteractionMode: 'auto',
       aiGenerating: false,
       aiWorkspaceLoading: false,
@@ -3241,6 +3245,7 @@ export default {
       this.syncSelectedIndicatorToChart(this.currentCode)
     },
     async handleAIGenerate () {
+      if (!this.modelSelectionReady) return
       if (this.selectedIndicatorCodeHidden) {
         this.$message.warning(this.$t('indicatorIde.saveBlockedHiddenCode'))
         return
@@ -3272,6 +3277,7 @@ export default {
         const lang = (this.$i18n && this.$i18n.locale) || 'en-US'
         const paramDefaults = this.parseIndicatorParamRaw(existingCode || this.currentCode || '')
         const requestBody = {
+          llm_selection: { ...this.llmSelection },
           prompt: userPrompt,
           source: 'indicator_ide',
           interactionMode: requestMode,

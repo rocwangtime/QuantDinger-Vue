@@ -26,3 +26,12 @@ test('every Copilot LLM request explicitly carries the chosen settings', () => {
   assert.match(source, /modelSelectionReady && !this.sending/)
   assert.match(source, /reasoningLabel\(usage.reasoning_effort/)
 })
+
+test('native strategy and indicator Agent editors also select and forward models', () => {
+  for (const editor of ['strategy-ide', 'indicator-ide']) {
+    const source = readFileSync(new URL(`../../src/views/${editor}/index.vue`, import.meta.url), 'utf8')
+    assert.match(source, /<AgentModelSelect v-model="llmSelection"/)
+    assert.match(source, /llm_selection: \{ \.\.\.this.llmSelection \}/)
+    assert.match(source, /if \(!this.modelSelectionReady\) return/)
+  }
+})
