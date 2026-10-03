@@ -15,6 +15,13 @@ export const asyncRouterMap = [
         component: () => import('@/views/agent-task-center'),
         meta: { title: 'menu.dashboard.agentTaskCenter', keepAlive: true, icon: 'schedule', permission: ['dashboard'] }
       },
+      {
+        path: '/ai-monitor',
+        name: 'AIMonitor',
+        component: () => import('@/views/agent-task-center'),
+        props: { workspaceMode: 'monitor' },
+        meta: { title: 'menu.dashboard.aiMonitor', keepAlive: true, icon: 'radar-chart', permission: ['dashboard'] }
+      },
       // AI asset analysis landing page.
       // keepAlive: true so the heavy market-data fetches (sentiment / indices /
       // heatmap / calendar / opportunities / watchlist prices) only run on the

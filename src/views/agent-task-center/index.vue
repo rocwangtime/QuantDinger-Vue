@@ -2,9 +2,9 @@
   <div class="agent-task-center qd-workspace-page" :class="{ 'theme-dark': isDarkTheme }">
     <header class="task-header">
       <div>
-        <span class="eyebrow">{{ copy.eyebrow }}</span>
-        <h1>{{ copy.title }}</h1>
-        <p>{{ copy.subtitle }}</p>
+        <span class="eyebrow">{{ monitorMode ? (copy === wordsZh ? 'EVENT-DRIVEN AGENT' : 'EVENT-DRIVEN AGENT') : copy.eyebrow }}</span>
+        <h1>{{ monitorMode ? (copy === wordsZh ? 'AI 盯盘' : 'AI Monitoring') : copy.title }}</h1>
+        <p>{{ monitorMode ? (copy === wordsZh ? '配置触发条件，让 Agent 定时复查并留下可审阅的机会线索。' : 'Configure triggers, re-run Agent research, and review opportunity leads.') : copy.subtitle }}</p>
       </div>
       <a-button icon="reload" :loading="loading" @click="loadAll">{{ copy.refresh }}</a-button>
     </header>
@@ -18,7 +18,18 @@
       <div class="summary-safety"><a-icon type="safety-certificate" /><span>{{ copy.safetySummary }}</span></div>
     </section>
 
-    <section class="task-section">
+    <section v-if="monitorMode" class="task-section monitor-workflow">
+      <div class="section-heading"><div><h2>{{ copy === wordsZh ? '事件驱动工作流' : 'Event-driven workflow' }}</h2><p>{{ copy === wordsZh ? '目前只开放研究环节；自动下单链路尚未接入。' : 'Research stages are available; automatic order execution is not connected yet.' }}</p></div></div>
+      <div class="workflow-steps">
+        <div><strong>01 · {{ copy === wordsZh ? '触发检查' : 'Trigger check' }}</strong><span>{{ copy === wordsZh ? '定时 / 价位 / 交易时段' : 'Schedule / price / market session' }}</span></div>
+        <div><strong>02 · {{ copy === wordsZh ? 'Agent 分析' : 'Agent analysis' }}</strong><span>{{ copy === wordsZh ? '研究简报与模型随任务保存' : 'Brief and model saved with each task' }}</span></div>
+        <div><strong>03 · {{ copy === wordsZh ? '机会线索' : 'Research lead' }}</strong><span>{{ copy === wordsZh ? '可审阅并生成策略候选' : 'Review and draft a strategy candidate' }}</span></div>
+        <div class="workflow-disabled"><strong>04 · {{ copy === wordsZh ? '模拟交易' : 'Paper execution' }}</strong><span>{{ copy === wordsZh ? '未联动；不会自动下单' : 'Not connected; no automatic orders' }}</span></div>
+      </div>
+      <p class="workflow-note">{{ copy === wordsZh ? '新闻热点触发也尚未接入。后续需把可信事件、交易意图、风险门禁和账户授权串起来，才能开放自动执行。' : 'News-event triggers are not connected yet. Trusted events, trade intents, risk gates and account authorization must be linked before automatic execution can be enabled.' }}</p>
+    </section>
+
+    <section v-if="!monitorMode" class="task-section">
       <div class="section-heading"><div><h2>{{ copy.startTitle }}</h2><p>{{ copy.startHint }}</p></div></div>
       <div class="entry-grid">
         <button type="button" @click="openDiscovery">
@@ -234,10 +245,12 @@ save: 'Save',
 export default {
   name: 'AgentTaskCenter',
   components: { ResearchTaskFields },
+  props: { workspaceMode: { type: String, default: 'overview' } },
   data () {
     return { researchForm: researchTaskForm(), editingMonitor: null, runningMonitorId: null, loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
   },
   computed: {
+    monitorMode () { return this.workspaceMode === 'monitor' },
     wordsZh () { return words.zh },
     ...mapState({ navTheme: state => state.app.theme }),
     isDarkTheme () { return this.navTheme === 'dark' || this.navTheme === 'realdark' },
@@ -478,6 +491,12 @@ export default {
 .entry-grid strong { font-size: 16px; }
 .entry-grid span { margin-top: 6px; color: var(--task-muted); line-height: 1.45; }
 .entry-grid em { margin-top: auto; padding-top: 10px; color: var(--task-accent); font-style: normal; }
+.workflow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.workflow-steps > div { display: flex; flex-direction: column; gap: 7px; padding: 15px; border: 1px solid var(--task-border); border-radius: 9px; background: var(--task-bg); }
+.workflow-steps strong { color: var(--task-text); }
+.workflow-steps span, .workflow-note { color: var(--task-muted); }
+.workflow-steps .workflow-disabled { border-style: dashed; }
+.workflow-note { margin: 14px 0 0; line-height: 1.6; }
 .task-columns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); align-items: start; gap: 16px; }
 .task-empty { padding: 24px 8px; color: var(--task-muted); }
 .task-row, .strategy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--task-border); }
@@ -508,7 +527,7 @@ export default {
 .strategy-row strong { display: block; }
 .permission-note { display: flex; gap: 8px; margin-top: 12px; padding: 12px; border-radius: 7px; background: var(--task-bg); color: var(--task-muted); line-height: 1.5; }
 .permission-note .anticon { flex: none; margin-top: 3px; color: var(--task-accent); }
-@media (max-width: 1050px) { .task-summary { grid-template-columns: repeat(3, 1fr); } .summary-safety { grid-column: 1 / -1; } .entry-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1050px) { .task-summary { grid-template-columns: repeat(3, 1fr); } .summary-safety { grid-column: 1 / -1; } .entry-grid, .workflow-steps { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .agent-task-center { padding: 18px 14px 34px; } .task-columns { grid-template-columns: 1fr; } .task-summary { grid-template-columns: repeat(2, 1fr); } .task-header { align-items: flex-start; } .opportunity-row { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 480px) { .entry-grid, .task-summary { grid-template-columns: 1fr; } .section-heading { flex-wrap: wrap; } .entry-grid button { min-height: 120px; } }
 </style>

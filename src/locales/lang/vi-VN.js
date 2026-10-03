@@ -3614,6 +3614,7 @@ const locale = {
   "menu.dashboard": "Bảng điều khiển",
   "menu.dashboard.aiAssetAnalysis": "Phân tích AI thông minh",
   "menu.dashboard.agentTaskCenter": "Trung tâm tác vụ",
+  "menu.dashboard.aiMonitor": "Giám sát AI",
   "menu.dashboard.aiQuant": "Định lượng AI",
   "menu.dashboard.aiTradingAssistant": "Trợ lý giao dịch AI",
   "menu.dashboard.analysis": "Phân tích AI",

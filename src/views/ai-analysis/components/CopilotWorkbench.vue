@@ -173,6 +173,7 @@
               <a-icon type="warning" />
               <span>{{ msg.streamWarning }}</span>
             </div>
+            <div v-if="msg.isThinking && msg.progressPhase" class="message-meta">{{ generationPhaseLabel(msg.progressPhase) }}</div>
             <div v-if="msg.meta" class="message-meta">{{ msg.meta }}</div>
             <details v-if="agentUsageItems(msg).length" class="agent-usage">
               <summary>
@@ -188,6 +189,19 @@
                   <a-icon :type="item.kind === 'tool' ? 'api' : 'experiment'" />
                   {{ item.label }}
                 </span>
+              </div>
+            </details>
+            <details v-if="msg.contextManifest" class="agent-usage">
+              <summary><a-icon type="profile" /> {{ isZh ? '本次模型上下文与数据来源' : 'Model context and data sources' }}</summary>
+              <div class="agent-usage-items">
+                <span>{{ msg.contextManifest.market || '--' }}:{{ msg.contextManifest.symbol || '--' }}</span>
+                <span>{{ isZh ? '近期对话' : 'Recent messages' }} {{ msg.contextManifest.history_count || 0 }}</span>
+                <span>{{ isZh ? '记忆' : 'Memories' }} {{ msg.contextManifest.memory_count || 0 }}</span>
+                <span v-if="msg.contextManifest.price_source">{{ isZh ? '行情' : 'Quote' }} {{ msg.contextManifest.price_source }} · {{ msg.contextManifest.price_time || msg.contextManifest.snapshot_time || '--' }}</span>
+                <span v-if="msg.contextManifest.timeframes && msg.contextManifest.timeframes.length">K {{ msg.contextManifest.timeframes.join(', ') }}</span>
+                <span>{{ isZh ? '新闻检索' : 'News results' }} {{ msg.contextManifest.news_count || 0 }}</span>
+                <span>{{ isZh ? '券商成交记录未自动提供' : 'Broker fills not automatically included' }}</span>
+                <span v-if="msg.contextUsage && msg.contextUsage.context_truncated">{{ isZh ? '上下文超限，已压缩部分较早内容' : 'Context budget reached; older content was compacted' }}</span>
               </div>
             </details>
             <div v-if="msg.role === 'assistant' && !msg.isThinking" class="message-actions">
@@ -345,7 +359,8 @@
             <a-button @click="$refs.fileInput.click()">
               <a-icon type="picture" /> {{ uploadImageLabel }}
             </a-button>
-            <a-button type="primary" :loading="sending" :disabled="!canSend" @click="sendMessage">
+            <a-button v-if="sending && activeAssistantMessage && !generatingStrategy" icon="stop" @click="stopGeneration">{{ isZh ? '停止生成' : 'Stop generation' }}</a-button>
+            <a-button type="primary" :disabled="!canSend" @click="sendMessage">
               <a-icon type="thunderbolt" /> {{ text.send }}
             </a-button>
           </div>
@@ -764,6 +779,11 @@ export default {
       sessionId: null,
       mobileSessionsOpen: false,
       sending: false,
+      activeGenerationController: null,
+      activeGenerationRequestId: '',
+      activeAssistantMessage: null,
+      generationStopped: false,
+      generationSequence: 0,
       lastSendSignature: '',
       lastSendAt: 0,
       billing: { feature_costs: {} },
@@ -1372,6 +1392,7 @@ export default {
     this.scheduleMarkdownCharts()
   },
   beforeDestroy () {
+    if (this.activeGenerationController) this.activeGenerationController.abort()
     if (this.symbolSearchTimer) clearTimeout(this.symbolSearchTimer)
     if (this.addWatchSearchTimer) clearTimeout(this.addWatchSearchTimer)
     if (this._markdownChartFrame) cancelAnimationFrame(this._markdownChartFrame)
@@ -1380,6 +1401,40 @@ export default {
     this._markdownCharts = null
   },
   methods: {
+    generationPhaseLabel (phase) {
+      const zh = { routing: '正在识别任务…', context: '正在获取行情与研究资料…', generation: '模型正在生成回答…' }
+      const en = { routing: 'Routing the request…', context: 'Collecting market and research data…', generation: 'Generating the answer…' }
+      return (this.isZh ? zh : en)[phase] || this.thinkingText
+    },
+    async stopGeneration () {
+      if (!this.sending && !this.generatingStrategy) return
+      this.generationStopped = true
+      this.generationSequence += 1
+      const requestId = this.activeGenerationRequestId
+      const controller = this.activeGenerationController
+      const message = this.activeAssistantMessage
+      if (message) {
+        if (message.isThinking) message.content = this.isZh ? '已停止生成。' : 'Generation stopped.'
+        message.isThinking = false
+        message.progressPhase = ''
+        if (message.content && message.content !== '已停止生成。' && message.content !== 'Generation stopped.') {
+          message.streamWarning = this.isZh ? '已停止，以上为未完成内容。' : 'Stopped; the text above is incomplete.'
+        }
+      }
+      this.sending = false
+      let cancellation = Promise.resolve()
+      if (requestId) {
+        const token = this.getAccessToken()
+        cancellation = fetch('/api/ai/chat/message/cancel', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', [ACCESS_TOKEN]: token, token },
+            body: JSON.stringify({ request_id: requestId })
+          }).catch(() => {})
+      }
+      if (controller) controller.abort()
+      await cancellation
+    },
     applyIncomingCopilotPrompt () {
       const query = (this.$route && this.$route.query) || {}
       if (query.scope === 'watchlist' || query.scope === 'unbound') {
@@ -3692,25 +3747,28 @@ export default {
       const context = this.buildChatContext(content, resolvedSymbol)
       const res = await classifyAgentIntent({
         llm_selection: { ...this.llmSelection },
+        session_id: this.sessionId,
         message: content,
         attachments,
         context,
         language: this.$i18n ? this.$i18n.locale : 'zh-CN'
-      }).catch(() => null)
+      }, this.activeGenerationController && this.activeGenerationController.signal).catch(() => null)
       const plan = res && res.data ? res.data : null
-      return { plan, resolvedSymbol }
+      return { plan, resolvedSymbol, routingToken: (res && res.routing_token) || '' }
     },
     async handleBackendAgentIntent (content, attachments, contextLock = null) {
       let plan = null
       let resolvedSymbol = null
+      let routingToken = ''
       try {
         const classified = await this.classifyAgentPlan(content, attachments, contextLock)
         plan = classified.plan
         resolvedSymbol = classified.resolvedSymbol
+        routingToken = classified.routingToken
       } catch (_) {
-        return { handled: false, plan, resolvedSymbol }
+        return { handled: false, plan, resolvedSymbol, routingToken }
       }
-      if (!plan || !plan.should_execute || plan.intent !== 'strategy_build') return { handled: false, plan, resolvedSymbol }
+      if (!plan || !plan.should_execute || plan.intent !== 'strategy_build') return { handled: false, plan, resolvedSymbol, routingToken }
       const target = this.agentTargetFromPlan(plan, contextLock || resolvedSymbol || this.context)
       if (!target || !target.symbol) {
         this.messages.push({
@@ -4136,6 +4194,10 @@ export default {
       if (this.lastSendSignature === signature && now - this.lastSendAt < 1500) return
       this.lastSendSignature = signature
       this.lastSendAt = now
+      const generationId = (Number(this.generationSequence) || 0) + 1
+      this.generationSequence = generationId
+      this.generationStopped = false
+      this.activeGenerationController = new AbortController()
       this.sending = true
       const beforeSendCount = this.messages.length
       const createdAt = new Date().toISOString()
@@ -4186,16 +4248,19 @@ export default {
         created_at: new Date().toISOString()
       }
       this.messages.push(assistantMsg)
+      this.activeAssistantMessage = assistantMsg
       this.scrollToBottom()
       const preflight = this.loadAgentPreflight()
       let routing
       try {
         routing = await this.handleBackendAgentIntent(content, attachments, contextLock)
       } catch (error) {
+        if (generationId !== this.generationSequence) return
         this.replacePendingAssistant(assistantMsg, { role: 'assistant', content: error.message || this.text.chatUnavailable, isThinking: false })
         this.sending = false
         return
       }
+      if (generationId !== this.generationSequence) return
       if (routing.handled) {
         this.messages = this.messages.filter(item => item.localId !== assistantMsg.localId)
         this.sending = false
@@ -4203,6 +4268,7 @@ export default {
         return
       }
       await preflight
+      if (generationId !== this.generationSequence) return
       const blockers = this.agentPreflight && Array.isArray(this.agentPreflight.blockers) ? this.agentPreflight.blockers : []
       if (blockers.length) {
         const guide = this.buildPreflightGuide(this.pendingAgentTask)
@@ -4234,11 +4300,13 @@ export default {
       const preferJsonResponse = this.isMonitorIntent(content)
       if (!preferJsonResponse) {
         try {
-          await this.sendMessageStream(content, attachments, assistantMsg, chatContext, referencedReportId)
+          await this.sendMessageStream(content, attachments, assistantMsg, chatContext, referencedReportId, routing.routingToken)
+          if (generationId !== this.generationSequence) return
           this.sending = false
           this.scrollToBottom()
           return
         } catch (streamError) {
+          if (generationId !== this.generationSequence || (streamError && streamError.name === 'AbortError')) return
           if (streamError && (streamError.streamAccepted || streamError.streamHasContent)) {
             const hasContent = Boolean(String(assistantMsg.content || '').trim()) && !assistantMsg.isThinking
             assistantMsg.isThinking = false
@@ -4268,6 +4336,7 @@ export default {
         })
         if (res && res.code === 0) throw new Error(res.msg || this.text.chatUnavailable)
         const data = res.data || {}
+        if (generationId !== this.generationSequence) return
         this.sessionId = data.session_id || this.sessionId
         const fallbackAssistant = this.replacePendingAssistant(assistantMsg, {
           localId: `local-${localId++}`,
@@ -4285,6 +4354,7 @@ export default {
         this.loadSessions()
         this.loadSessionMemory()
       } catch (e) {
+        if (generationId !== this.generationSequence) return
         const guide = this.buildSetupGuide(e, chatContext)
         const setupMsg = this.replacePendingAssistant(assistantMsg, {
           localId: `local-${localId++}`,
@@ -4296,7 +4366,7 @@ export default {
         })
         await this.persistCopilotMessage(setupMsg, 'setup_guide')
       } finally {
-        this.sending = false
+        if (generationId === this.generationSequence) this.sending = false
         this.loadBilling()
         this.scrollToBottom()
       }
@@ -4430,8 +4500,17 @@ export default {
       }))
       return { enabled, events }
     },
-    async sendMessageStream (content, attachments, assistantMsg, chatContext = null, referencedReportId = null) {
+    async sendMessageStream (content, attachments, assistantMsg, chatContext = null, referencedReportId = null, routingToken = '') {
       if (!window.fetch || !window.ReadableStream) throw new Error('Streaming is not supported')
+      const controller = this.activeGenerationController || new AbortController()
+      const requestId = window.crypto && window.crypto.randomUUID
+        ? window.crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const n = Math.floor(Math.random() * 16)
+          return (c === 'x' ? n : (n & 3) | 8).toString(16)
+        })
+      this.activeGenerationController = controller
+      this.activeGenerationRequestId = requestId
       const language = this.$i18n ? this.$i18n.locale : 'zh-CN'
       const headers = {
         'Content-Type': 'application/json',
@@ -4445,21 +4524,41 @@ export default {
         headers[ACCESS_TOKEN] = token
         headers.token = token
       }
-      const response = await fetch('/api/ai/chat/message/stream', {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          session_id: this.sessionId,
-          llm_selection: { ...this.llmSelection },
-          message: content,
-          attachments,
-          context: chatContext || this.buildChatContext(content),
-          referenced_report_id: referencedReportId,
-          language
+      let response
+      try {
+        response = await fetch('/api/ai/chat/message/stream', {
+          method: 'POST',
+          signal: controller.signal,
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({
+            session_id: this.sessionId,
+            llm_selection: { ...this.llmSelection },
+            request_id: requestId,
+            routing_token: routingToken,
+            message: content,
+            attachments,
+            context: chatContext || this.buildChatContext(content),
+            referenced_report_id: referencedReportId,
+            language
+          })
         })
-      })
-      if (!response.ok || !response.body) throw new Error(`Stream API ${response.status}`)
+      } catch (error) {
+        if (this.activeGenerationController === controller) {
+          this.activeGenerationController = null
+          this.activeGenerationRequestId = ''
+          this.activeAssistantMessage = null
+        }
+        throw error
+      }
+      if (!response.ok || !response.body) {
+        if (this.activeGenerationController === controller) {
+          this.activeGenerationController = null
+          this.activeGenerationRequestId = ''
+          this.activeAssistantMessage = null
+        }
+        throw new Error(`Stream API ${response.status}`)
+      }
       const reader = response.body.getReader()
       const decoder = new TextDecoder('utf-8')
       let buffer = ''
@@ -4512,6 +4611,11 @@ export default {
         }
         throw error
       } finally {
+        if (this.activeGenerationController === controller) {
+          this.activeGenerationController = null
+          this.activeGenerationRequestId = ''
+          this.activeAssistantMessage = null
+        }
         this.loadBilling()
       }
     },
@@ -4526,13 +4630,17 @@ export default {
       const payload = JSON.parse(data)
       if (eventName === 'accepted') {
         this.sessionId = payload.session_id || this.sessionId
+      } else if (eventName === 'progress') {
+        assistantMsg.progressPhase = payload.phase || ''
       } else if (eventName === 'meta') {
         this.sessionId = payload.session_id || this.sessionId
         assistantMsg.meta = payload.intent || ''
         this.setAgentUsageActions(assistantMsg, payload.actions, payload.agent_usage)
         assistantMsg.contextUsage = payload.context_usage || null
+        assistantMsg.contextManifest = payload.context_manifest || null
       } else if (eventName === 'delta') {
         if (payload.text) this.clearThinkingMessage(assistantMsg)
+        assistantMsg.progressPhase = ''
         assistantMsg.content += payload.text || ''
       } else if (eventName === 'replace') {
         if (payload.text) this.clearThinkingMessage(assistantMsg)
@@ -4543,6 +4651,7 @@ export default {
           ? this.text.outputLimit
           : (payload.msg || this.text.streamIncomplete)
       } else if (eventName === 'done') {
+        assistantMsg.progressPhase = ''
         this.sessionId = payload.session_id || this.sessionId
         if (payload.message_id) this.$set ? this.$set(assistantMsg, 'id', payload.message_id) : (assistantMsg.id = payload.message_id)
         assistantMsg.created_at = assistantMsg.created_at || new Date().toISOString()
@@ -4551,7 +4660,12 @@ export default {
         this.appendMemoryActions(assistantMsg, payload.memory_candidates)
         this.appendAgentNextActions(assistantMsg)
         assistantMsg.contextUsage = payload.context_usage || assistantMsg.contextUsage || null
+        assistantMsg.contextManifest = payload.context_manifest || assistantMsg.contextManifest || null
         this.loadSessionMemory()
+      } else if (eventName === 'cancelled') {
+        const error = new Error('Generation cancelled')
+        error.name = 'AbortError'
+        throw error
       } else if (eventName === 'error') {
         throw new Error(payload.msg || this.text.chatUnavailable)
       }

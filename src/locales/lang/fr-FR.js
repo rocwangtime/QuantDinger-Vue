@@ -3614,6 +3614,7 @@ const locale = {
   "menu.dashboard": "Tableau de bord",
   "menu.dashboard.aiAssetAnalysis": "Analyse IA",
   "menu.dashboard.agentTaskCenter": "Centre des tâches",
+  "menu.dashboard.aiMonitor": "Surveillance IA",
   "menu.dashboard.aiQuant": "IA Quant",
   "menu.dashboard.aiTradingAssistant": "Assistant de trading IA",
   "menu.dashboard.analysis": "Analyse de l'IA",

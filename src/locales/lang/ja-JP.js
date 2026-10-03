@@ -3614,6 +3614,7 @@ const locale = {
   "menu.dashboard": "ダッシュボード",
   "menu.dashboard.aiAssetAnalysis": "AIスマート分析",
   "menu.dashboard.agentTaskCenter": "タスクセンター",
+  "menu.dashboard.aiMonitor": "AIモニタリング",
   "menu.dashboard.aiQuant": "AIクオンツ",
   "menu.dashboard.aiTradingAssistant": "AIトレーディングアシスタント",
   "menu.dashboard.analysis": "AI分析",
