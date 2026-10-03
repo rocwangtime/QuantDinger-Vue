@@ -197,7 +197,7 @@
                 <span>{{ msg.contextManifest.market || '--' }}:{{ msg.contextManifest.symbol || '--' }}</span>
                 <span>{{ isZh ? '近期对话' : 'Recent messages' }} {{ msg.contextManifest.history_count || 0 }}</span>
                 <span>{{ isZh ? '记忆' : 'Memories' }} {{ msg.contextManifest.memory_count || 0 }}</span>
-                <span v-if="msg.contextManifest.price_source">{{ isZh ? '行情' : 'Quote' }} {{ msg.contextManifest.price_source }} · {{ msg.contextManifest.price_time || msg.contextManifest.snapshot_time || '--' }}</span>
+                <span v-if="msg.contextManifest.price_source">{{ isZh ? '行情' : 'Quote' }} {{ msg.contextManifest.price_source }} · {{ formatContextTime(msg.contextManifest.price_time || msg.contextManifest.snapshot_time, $i18n && $i18n.locale) }}</span>
                 <span v-if="msg.contextManifest.timeframes && msg.contextManifest.timeframes.length">K {{ msg.contextManifest.timeframes.join(', ') }}</span>
                 <span>{{ isZh ? '新闻检索' : 'News results' }} {{ msg.contextManifest.news_count || 0 }}</span>
                 <span>{{ isZh ? '券商成交记录未自动提供' : 'Broker fills not automatically included' }}</span>
@@ -726,6 +726,7 @@ import {
 import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
 import { verifyStrategyCode } from '@/api/strategy'
 import AgentModelSelect from '@/components/AgentModelSelect.vue'
+import { formatContextTime } from './copilotContextTime.mjs'
 import { reasoningLabel } from '@/utils/agentModelSelection.mjs'
 import { researchTaskForm, researchTaskConfig, validatedStrategyCode, nextSessionRadar } from '@/utils/researchWorkflow.mjs'
 import { getEconomicCalendar } from '@/api/global-market'
@@ -1401,6 +1402,7 @@ export default {
     this._markdownCharts = null
   },
   methods: {
+    formatContextTime,
     generationPhaseLabel (phase) {
       const zh = { routing: '正在识别任务…', context: '正在获取行情与研究资料…', generation: '模型正在生成回答…' }
       const en = { routing: 'Routing the request…', context: 'Collecting market and research data…', generation: 'Generating the answer…' }
