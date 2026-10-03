@@ -13,6 +13,14 @@ const router = read('../../src/config/router.config.js')
 const layout = read('../../src/layouts/BasicLayout.vue')
 const copilot = read('../../src/views/ai-analysis/components/CopilotWorkbench.vue')
 
+test('research history supports readable vertical reports and portal-safe theme colors', () => {
+  assert.match(page, /width="min\(720px, 100vw\)"/)
+  assert.match(page, /:body-style="runsPanelStyle"/)
+  assert.match(page, /\.task-run-symbol \{[^}]*flex-direction: column/)
+  assert.match(page, /white-space: pre-wrap/)
+  assert.match(page, /getMonitorRuns\(monitor.id\), getMonitors\(\).catch/)
+})
+
 test('task center is the default workspace and keeps research and execution separate', () => {
   assert.match(router, /redirect: '\/agent-task-center'/)
   assert.match(router, /path: '\/agent-task-center'/)
