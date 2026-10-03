@@ -262,7 +262,8 @@
                       </div>
                       <div v-if="aiGenerating" class="ai-message ai-message--assistant ai-message--thinking">
                         <div class="ai-message__role">AI</div>
-                        <div class="ai-message__content"><a-icon type="loading" spin /> {{ $t('indicatorIde.aiThinking') }}</div>
+                        <div class="ai-message__content"><a-icon type="loading" spin /> {{ aiStreamStatus }}</div>
+                        <pre v-if="aiLiveDraft" class="ai-live-draft">{{ aiLiveDraft }}</pre>
                       </div>
                     </div>
 
@@ -289,6 +290,7 @@
                         >
                           <span v-if="!aiGenerating">{{ $t('indicatorIde.aiSend') }}</span>
                         </a-button>
+                        <a-button v-if="aiGenerating" size="small" icon="stop" @click="stopAiGeneration">{{ $i18n.locale === 'zh-CN' ? '停止生成' : 'Stop generation' }}</a-button>
                       </div>
                     </div>
                     <div class="ai-helper-tip">{{ $t('indicatorIde.aiSmartRoutingHint') }}</div>
@@ -1286,6 +1288,11 @@ export default {
       modelSelectionReady: false,
       aiInteractionMode: 'auto',
       aiGenerating: false,
+      aiGenerationPhase: '',
+      aiLiveDraft: '',
+      aiRequestController: null,
+      aiRequestId: '',
+      aiCancelled: false,
       aiWorkspaceLoading: false,
       aiMessages: [],
       aiThread: null,
@@ -1354,6 +1361,13 @@ export default {
     }
   },
   computed: {
+    aiStreamStatus () {
+      const zh = this.$i18n && this.$i18n.locale === 'zh-CN'
+      const labels = zh
+        ? { routing: '正在识别任务…', generation: '模型正在生成…', validation: '正在校验草稿…', repair: '正在流式修复草稿…', full_fallback: '正在重新生成完整草稿…' }
+        : { routing: 'Routing the request…', generation: 'Generating…', validation: 'Validating draft…', repair: 'Streaming a repair…', full_fallback: 'Regenerating a full draft…' }
+      return labels[this.aiGenerationPhase] || this.$t('indicatorIde.aiThinking')
+    },
     sortedCodeQualityHints () {
       const order = { error: 0, warn: 1, info: 2 }
       return [...(this.codeQualityHints || [])].sort(
@@ -3244,6 +3258,26 @@ export default {
       this.aiPreviewVisible = false
       this.syncSelectedIndicatorToChart(this.currentCode)
     },
+    async stopAiGeneration () {
+      if (!this.aiGenerating) return
+      this.aiCancelled = true
+      const requestId = this.aiRequestId
+      const controller = this.aiRequestController
+      if (controller) controller.abort()
+      this.aiGenerating = false
+      this.aiMessages.push({ role: 'assistant', content: this.$i18n.locale === 'zh-CN' ? '已停止生成；未保存或应用候选。' : 'Generation stopped; no candidate was saved or applied.', message_type: 'discussion', localId: `stopped-${Date.now()}` })
+      this.aiLiveDraft = ''
+      this.$nextTick(this.scrollAiConversationToBottom)
+      if (requestId) {
+        const token = storage.get(ACCESS_TOKEN)
+        await fetch('/api/ai/chat/message/cancel', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', 'Access-Token': token || '', Token: token || '' },
+          body: JSON.stringify({ request_id: requestId })
+        }).catch(() => {})
+      }
+    },
     async handleAIGenerate () {
       if (!this.modelSelectionReady) return
       if (this.selectedIndicatorCodeHidden) {
@@ -3261,6 +3295,12 @@ export default {
       const userPrompt = this.aiPrompt.trim()
       const requestMode = this.aiInteractionMode || 'auto'
       this.aiGenerating = true
+      this.aiCancelled = false
+      this.aiGenerationPhase = 'routing'
+      this.aiLiveDraft = ''
+      const controller = new AbortController()
+      this.aiRequestController = controller
+      this.aiRequestId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : ''
       this.aiDebugSummary = null
       let existingCode = ''
       if (this.cmInstance) existingCode = this.cmInstance.getValue() || ''
@@ -3278,6 +3318,7 @@ export default {
         const paramDefaults = this.parseIndicatorParamRaw(existingCode || this.currentCode || '')
         const requestBody = {
           llm_selection: { ...this.llmSelection },
+          request_id: this.aiRequestId,
           prompt: userPrompt,
           source: 'indicator_ide',
           interactionMode: requestMode,
@@ -3296,6 +3337,7 @@ export default {
 
         const response = await fetch(url, {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: token ? `Bearer ${token}` : '',
@@ -3332,12 +3374,27 @@ export default {
               if (json.error) {
                 throw new Error(json.error)
               }
+              if (json.cancelled) {
+                const stopped = new Error('Generation cancelled')
+                stopped.name = 'AbortError'
+                throw stopped
+              }
+              if (json.phase) {
+                if (json.phase !== this.aiGenerationPhase && ['repair', 'full_fallback'].includes(json.phase)) this.aiLiveDraft = ''
+                this.aiGenerationPhase = json.phase
+              }
+              if (json.draft) {
+                this.aiGenerationPhase = json.phase || this.aiGenerationPhase
+                this.aiLiveDraft += json.draft
+                this.$nextTick(this.scrollAiConversationToBottom)
+              }
               if (json.debug && json.debug.human_summary) {
                 this.aiDebugSummary = this.normalizeAiDebugSummary(json.debug.human_summary)
               }
               if (json.workspace) workspaceMeta = json.workspace
               if (json.content) {
                 generatedCode += json.content
+                if (!this.aiLiveDraft) this.aiLiveDraft += json.content
               }
             } catch (err) {
               if (err instanceof Error && err.message) {
@@ -3346,6 +3403,7 @@ export default {
             }
           }
         }
+        if (this.aiCancelled || controller.signal.aborted) return
         const replyType = (workspaceMeta && workspaceMeta.reply_type) || 'candidate'
         if (replyType === 'discussion') {
           const assistantMessage = workspaceMeta && workspaceMeta.assistant_message
@@ -3387,6 +3445,7 @@ export default {
           this.$message.warning(this.$t('indicatorIde.aiNoCode'))
         }
       } catch (error) {
+        if (this.aiCancelled || controller.signal.aborted || (error && error.name === 'AbortError')) return
         const errMsg = (error && error.message) || this.$t('indicatorIde.aiGenerateFailed')
         if (/insufficient|credit/i.test(errMsg)) {
           this.$message.warning(errMsg)
@@ -3396,7 +3455,13 @@ export default {
         this.aiMessages.push({ role: 'assistant', content: errMsg, localId: `error-${Date.now()}` })
         this.$nextTick(this.scrollAiConversationToBottom)
       } finally {
-        this.aiGenerating = false
+        if (this.aiRequestController === controller) {
+          this.aiGenerating = false
+          this.aiRequestController = null
+          this.aiRequestId = ''
+          this.aiGenerationPhase = ''
+          this.aiLiveDraft = ''
+        }
       }
     },
     renderAiMessage (messageItem) {
@@ -5578,6 +5643,7 @@ body.dark .ide-signal-alert-modal-wrap {
   border-radius: 10px 10px 0 0;
 }
 .ai-message--thinking { opacity: 0.75; }
+.ai-live-draft { max-height: 190px; overflow: auto; margin: 8px 0 0; padding: 9px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; background: #111827; color: #dbeafe; font-size: 11px; }
 .ai-message__badge {
   display: inline-flex;
   align-items: center;

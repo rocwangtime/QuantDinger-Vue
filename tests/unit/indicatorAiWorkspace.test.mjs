@@ -21,6 +21,16 @@ test('indicator AI is indicator-scoped and does not overwrite the editor while s
   assert.doesNotMatch(streamingBlock, /cmInstance\.setValue/)
 })
 
+test('indicator AI shows live model deltas and cancels before candidate application', () => {
+  assert.match(viewSource, /request_id: this\.aiRequestId/)
+  assert.match(viewSource, /signal: controller\.signal/)
+  assert.match(viewSource, /if \(json\.draft\)/)
+  assert.match(viewSource, /this\.aiLiveDraft \+= json\.draft/)
+  assert.match(viewSource, /async stopAiGeneration \(\)/)
+  assert.match(viewSource, /\/api\/ai\/chat\/message\/cancel/)
+  assert.match(viewSource, /if \(this\.aiCancelled \|\| controller\.signal\.aborted\) return/)
+})
+
 test('new indicators immediately bind a fresh AI workspace without a manual reselect', () => {
   const createBlock = viewSource.slice(
     viewSource.indexOf('async _createIndicatorInIde ()'),
