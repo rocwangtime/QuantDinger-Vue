@@ -22,7 +22,7 @@ test('every Copilot LLM request explicitly carries the chosen settings', () => {
     assert.match(source, new RegExp(`${api}\\(\\{\\s+llm_selection: \\{ \\.\\.\\.this.llmSelection \\}`))
   }
   assert.match(source, /fetch\('\/api\/strategies\/generate\/stream'[\s\S]*llm_selection: \{ \.\.\.this\.llmSelection \}/)
-  assert.match(source, /session_id: this.sessionId,\s+llm_selection:/)
+  assert.match(source, /session_id: routingSessionId === undefined \? this.sessionId : routingSessionId,\s+llm_selection:/)
   assert.match(source, /prompt: agentPrompt,\s+llm_selection:/)
   assert.match(source, /modelSelectionReady && !this.sending/)
   assert.match(source, /reasoningLabel\(usage.reasoning_effort/)
