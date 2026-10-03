@@ -149,6 +149,7 @@
     </a-modal>
     <a-drawer :visible="runsVisible" :title="selectedMonitor ? selectedMonitor.name : copy.runHistory" :width="520" @close="runsVisible = false">
       <a-spin :spinning="loadingRuns">
+        <a-button v-if="selectedMonitor" size="small" icon="reload" @click="openMonitorRuns(selectedMonitor)">{{ copy.refresh }}</a-button>
         <a-alert type="info" show-icon :message="copy.runsBoundary" class="task-alert" />
         <div v-if="!monitorRuns.length" class="task-empty">{{ copy.noRuns }}</div>
         <div v-for="run in monitorRuns" :key="run.id" class="task-run">
