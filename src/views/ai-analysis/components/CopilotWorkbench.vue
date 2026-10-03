@@ -724,6 +724,7 @@ import {
   createChatReportShare
 } from '@/api/market'
 import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
+import { verifyStrategyCode } from '@/api/strategy'
 import AgentModelSelect from '@/components/AgentModelSelect.vue'
 import { reasoningLabel } from '@/utils/agentModelSelection.mjs'
 import { researchTaskForm, researchTaskConfig, validatedStrategyCode, nextSessionRadar } from '@/utils/researchWorkflow.mjs'
@@ -4118,6 +4119,24 @@ export default {
           try { await reader.cancel() } catch (_) {}
         }
         if (!res) throw new Error('Strategy stream ended before validation')
+        assistantMsg.content = this.isZh ? '策略草稿已生成，正在检查策略契约…' : 'Draft generated; checking the strategy contract…'
+        const verification = await verifyStrategyCode({ code: res.data.code }, controller.signal)
+        if (controller.signal.aborted) {
+          const error = new Error('Generation cancelled')
+          error.name = 'AbortError'
+          throw error
+        }
+        const verified = verification && verification.data
+        if (!(verification && verification.code === 1 && verified && verified.valid)) {
+          throw new Error((verified && verified.error) || (verification && verification.msg) || 'Strategy contract verification failed')
+        }
+        res.data.manifest = verified.manifest
+        res.data.validation = {
+          ...(res.data.validation || {}),
+          success: true,
+          contract: 'compiled',
+          behavior: { executed: false, reason: 'backtest_required' }
+        }
         const code = validatedStrategyCode(res)
         const scriptDraftMeta = {
           symbol: target.symbol,
@@ -4130,6 +4149,7 @@ export default {
           `## ${target.symbol} ${this.text.scriptStrategy}`,
           '',
           this.i18nText('aiAssetAnalysis.copilot.scriptStrategyReady'),
+          this.isZh ? '源码已通过契约检查；仍需回测和人工确认，不会自动运行或下单。' : 'The source passed contract checks; backtest and review are still required. It will not run or place orders automatically.',
           '',
           '```python',
           code,

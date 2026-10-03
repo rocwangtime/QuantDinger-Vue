@@ -219,11 +219,12 @@ export function getUnreadNotificationCount () {
   })
 }
 
-export function verifyStrategyCode (data) {
+export function verifyStrategyCode (data, signal = null) {
   return request({
     url: api.verifyCode,
     method: 'post',
-    data
+    data,
+    signal
   })
 }
 
