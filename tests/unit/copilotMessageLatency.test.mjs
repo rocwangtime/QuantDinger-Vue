@@ -23,7 +23,7 @@ function deferred () {
 }
 
 function workspace (classify = async () => ({ data: { intent: 'market_analysis', should_execute: false } })) {
-  const calls = { resolve: 0, classify: 0, preflight: 0, stream: [] }
+  const calls = { resolve: 0, classify: 0, preflight: 0, contextBuilds: 0, stream: [], streamRouting: [] }
   const vm = {
     ...loadMethods(['sendMessage', 'classifyAgentPlan', 'handleBackendAgentIntent'], {
       classifyAgentIntent: (...args) => { calls.classify++; return classify(...args) }
@@ -34,11 +34,11 @@ function workspace (classify = async () => ({ data: { intent: 'market_analysis',
     async handlePendingStrategyAgentMessage () { return false },
     async loadAgentPreflight () { calls.preflight++; this.agentPreflight = { blockers: [] } },
     async resolveMessageSymbol () { calls.resolve++; return { market: 'USStock', symbol: 'SPCX' } },
-    buildChatContext (message, symbol) { return { ...symbol } },
+    buildChatContext (message, symbol) { calls.contextBuilds++; return { ...symbol } },
     normalizeSymbolOption (value) { return value }, symbolOptionValue (value) { return value.symbol },
     isMonitorIntent () { return false },
-    async sendMessageStream (message, attachments, reply, context) {
-      calls.stream.push(context); reply.content = 'answer'; reply.isThinking = false
+    async sendMessageStream (message, attachments, reply, context, reportId, token, sessionId) {
+      calls.stream.push(context); calls.streamRouting.push({ token, sessionId }); reply.content = 'answer'; reply.isThinking = false
     },
     replacePendingAssistant (pending, value) { Object.assign(pending, value); return pending },
     async persistCopilotMessage () {},
@@ -60,9 +60,22 @@ test('thinking is visible while routing is pending and routing runs once per mes
   gate.resolve({ data: plan })
   await sending
   assert.equal(calls.resolve, 1)
+  assert.equal(calls.contextBuilds, 1)
   assert.equal(calls.stream[0].agent_intent, plan)
   assert.equal(calls.stream[0].symbol, 'SPCX')
   assert.equal(vm.sending, false)
+})
+
+test('signed router result reuses its exact context and session in the stream', async () => {
+  const { vm, calls } = workspace(async () => ({
+    data: { intent: 'market_analysis', should_execute: false },
+    routing_token: 'signed-for-original-context'
+  }))
+  vm.sessionId = 17
+  await vm.sendMessage()
+  assert.equal(calls.contextBuilds, 1)
+  assert.equal(calls.streamRouting[0].token, 'signed-for-original-context')
+  assert.equal(calls.streamRouting[0].sessionId, 17)
 })
 
 test('a locked target is preserved without symbol search', async () => {

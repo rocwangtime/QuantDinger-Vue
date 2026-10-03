@@ -3747,30 +3747,35 @@ export default {
     async classifyAgentPlan (content, attachments, contextLock = null) {
       const resolvedSymbol = contextLock || await this.resolveMessageSymbol(content)
       const context = this.buildChatContext(content, resolvedSymbol)
+      const sessionId = this.sessionId
       const res = await classifyAgentIntent({
         llm_selection: { ...this.llmSelection },
-        session_id: this.sessionId,
+        session_id: sessionId,
         message: content,
         attachments,
         context,
         language: this.$i18n ? this.$i18n.locale : 'zh-CN'
       }, this.activeGenerationController && this.activeGenerationController.signal).catch(() => null)
       const plan = res && res.data ? res.data : null
-      return { plan, resolvedSymbol, routingToken: (res && res.routing_token) || '' }
+      return { plan, resolvedSymbol, routingToken: (res && res.routing_token) || '', routingContext: context, routingSessionId: sessionId }
     },
     async handleBackendAgentIntent (content, attachments, contextLock = null) {
       let plan = null
       let resolvedSymbol = null
       let routingToken = ''
+      let routingContext = null
+      let routingSessionId = this.sessionId
       try {
         const classified = await this.classifyAgentPlan(content, attachments, contextLock)
         plan = classified.plan
         resolvedSymbol = classified.resolvedSymbol
         routingToken = classified.routingToken
+        routingContext = classified.routingContext
+        routingSessionId = classified.routingSessionId
       } catch (_) {
-        return { handled: false, plan, resolvedSymbol, routingToken }
+        return { handled: false, plan, resolvedSymbol, routingToken, routingContext, routingSessionId }
       }
-      if (!plan || !plan.should_execute || plan.intent !== 'strategy_build') return { handled: false, plan, resolvedSymbol, routingToken }
+      if (!plan || !plan.should_execute || plan.intent !== 'strategy_build') return { handled: false, plan, resolvedSymbol, routingToken, routingContext, routingSessionId }
       const target = this.agentTargetFromPlan(plan, contextLock || resolvedSymbol || this.context)
       if (!target || !target.symbol) {
         this.messages.push({
@@ -4405,12 +4410,14 @@ export default {
           this.symbolOptions = [normalized].concat(this.symbolOptions || [])
         }
       }
-      const chatContext = this.buildChatContext(content, resolvedSymbol)
+      // A signed routing result is bound to the preflight target and session.
+      // Rebuilding either here can invalidate the token and repeat a slow LLM route.
+      const chatContext = routing.routingContext || this.buildChatContext(content, resolvedSymbol)
       if (routing.plan) chatContext.agent_intent = routing.plan
       const preferJsonResponse = this.isMonitorIntent(content)
       if (!preferJsonResponse) {
         try {
-          await this.sendMessageStream(content, attachments, assistantMsg, chatContext, referencedReportId, routing.routingToken)
+          await this.sendMessageStream(content, attachments, assistantMsg, chatContext, referencedReportId, routing.routingToken, routing.routingSessionId)
           if (generationId !== this.generationSequence) return
           this.sending = false
           this.scrollToBottom()
@@ -4618,7 +4625,7 @@ export default {
       }))
       return { enabled, events }
     },
-    async sendMessageStream (content, attachments, assistantMsg, chatContext = null, referencedReportId = null, routingToken = '') {
+    async sendMessageStream (content, attachments, assistantMsg, chatContext = null, referencedReportId = null, routingToken = '', routingSessionId = undefined) {
       if (!window.fetch || !window.ReadableStream) throw new Error('Streaming is not supported')
       const controller = this.activeGenerationController || new AbortController()
       const requestId = window.crypto && window.crypto.randomUUID
@@ -4650,7 +4657,7 @@ export default {
           headers,
           credentials: 'include',
           body: JSON.stringify({
-            session_id: this.sessionId,
+            session_id: routingSessionId === undefined ? this.sessionId : routingSessionId,
             llm_selection: { ...this.llmSelection },
             request_id: requestId,
             routing_token: routingToken,
