@@ -309,7 +309,9 @@
 
                     <div v-if="aiStrategyGenerating" class="strategy-ai-message strategy-ai-message--assistant strategy-ai-message--thinking">
                       <div class="strategy-ai-message__role">AI</div>
-                      <div class="strategy-ai-message__content"><a-icon type="loading" spin /> {{ aiWorkspaceText.thinking }}</div>
+                      <div class="strategy-ai-message__content"><a-icon type="loading" spin /> {{ aiStreamStatus }}</div>
+                      <pre v-if="aiLiveDraft" class="strategy-ai-live-draft">{{ aiLiveDraft }}</pre>
+                      <small v-if="aiLiveDraft" class="strategy-ai-live-warning">{{ aiStreamText.unvalidated }}</small>
                     </div>
                   </div>
 
@@ -326,10 +328,11 @@
                     />
                     <div class="strategy-ai-composer__footer">
                       <span>{{ aiWorkspaceText.shortcut }}</span>
+                      <a-button v-if="aiStrategyGenerating" class="strategy-ai-send" @click="stopStrategyAiTurn">{{ aiStreamText.stop }}</a-button>
                       <a-button
+                        v-else
                         type="primary"
                         class="strategy-ai-send"
-                        :loading="aiStrategyGenerating"
                         :disabled="!modelSelectionReady || !String(aiStrategyPrompt || '').trim() || scriptCodeHidden"
                         @click="sendStrategyAiTurn"
                       >{{ aiWorkspaceText.send }}</a-button>
@@ -689,12 +692,12 @@ import {
   getScriptSourceVersions,
   publishScriptSource,
   restoreScriptSourceVersion,
-  runStrategyAiTurn,
   setStrategyAiCandidateStatus,
   updateScriptSource,
   verifyStrategyCode
 } from '@/api/strategy'
 import { streamStrategyDraft, cancelStrategyDraft } from '@/api/strategyDraftStream'
+import { streamStrategyWorkspaceTurn, cancelStrategyWorkspaceTurn } from '@/api/strategyWorkspaceStream'
 
 const EMPTY_DRAFT_CODE = ''
 const createDefaultRunConfig = () => ({
@@ -773,6 +776,11 @@ export default {
       aiPreviewVisible: false,
       aiStrategyPrompt: '',
       aiStrategyGenerating: false,
+      aiLiveDraft: '',
+      aiStreamPhase: '',
+      aiStreamController: null,
+      aiStreamRequestId: '',
+      aiStreamCancelled: false,
       aiInteractionMode: 'auto',
       aiRequestBaseCode: '',
       strategyValidation: null,
@@ -908,6 +916,14 @@ export default {
         acc[key] = this.$t(`strategyIde.aiWorkspace.${key}`)
         return acc
       }, {})
+    },
+    aiStreamText () {
+      const key = name => this.$t(`strategyIde.aiWorkspace.stream.${name}`)
+      return { stop: key('stop'), stopped: key('stopped'), unvalidated: key('unvalidated') }
+    },
+    aiStreamStatus () {
+      const phase = this.aiStreamPhase || 'routing'
+      return this.$t(`strategyIde.aiWorkspace.stream.${phase}`)
     },
     aiStrategyText () {
       const t = key => this.$t(`strategyIde.aiGenerate.${key}`)
@@ -1088,6 +1104,10 @@ export default {
     }
   },
   beforeDestroy () {
+    if (this.aiStreamController) {
+      if (this.aiStreamRequestId) cancelStrategyWorkspaceTurn(this.aiStreamRequestId)
+      this.aiStreamController.abort()
+    }
     if (this.strategySymbolSearchTimer) clearTimeout(this.strategySymbolSearchTimer)
     if (this._saveShortcut) {
       window.removeEventListener('keydown', this._saveShortcut, true)
@@ -1409,6 +1429,12 @@ export default {
       event.preventDefault()
       if (!this.aiStrategyGenerating && String(this.aiStrategyPrompt || '').trim()) this.sendStrategyAiTurn()
     },
+    stopStrategyAiTurn () {
+      if (!this.aiStrategyGenerating) return
+      this.aiStreamCancelled = true
+      if (this.aiStreamRequestId) cancelStrategyWorkspaceTurn(this.aiStreamRequestId)
+      if (this.aiStreamController) this.aiStreamController.abort()
+    },
     async sendStrategyAiTurn () {
       if (!this.modelSelectionReady) return
       const prompt = String(this.aiStrategyPrompt || '').trim()
@@ -1417,6 +1443,12 @@ export default {
       const repairToBacktest = this.copilotRepairToBacktest
       this.copilotRepairToBacktest = false
       this.aiStrategyGenerating = true
+      this.aiLiveDraft = ''
+      this.aiStreamPhase = 'routing'
+      this.aiStreamCancelled = false
+      const controller = new AbortController()
+      this.aiStreamController = controller
+      this.aiStreamRequestId = ''
       this.aiRequestBaseCode = existingCode
       this.aiMessages.push({
         role: 'user',
@@ -1429,7 +1461,7 @@ export default {
       this.aiInteractionMode = 'auto'
       this.$nextTick(this.scrollStrategyAiConversation)
       try {
-        const res = await runStrategyAiTurn({
+        const data = await streamStrategyWorkspaceTurn({
           llm_selection: { ...this.llmSelection },
           sourceId: Number(this.currentSourceId || 0),
           assetType: this.currentAssetType,
@@ -1438,8 +1470,25 @@ export default {
           interactionMode,
           generationMode: 'authoring',
           context: { source: 'strategy_ide' }
+        }, {
+          signal: controller.signal,
+          onRequestId: id => { this.aiStreamRequestId = id },
+          onProgress: phase => {
+            if (phase === 'repair' || phase === 'full_fallback') this.aiLiveDraft = ''
+            this.aiStreamPhase = phase
+          },
+          onDelta: (text, phase) => {
+            if (controller.signal.aborted) return
+            this.aiStreamPhase = phase
+            this.aiLiveDraft += text
+            this.$nextTick(this.scrollStrategyAiConversation)
+          }
         })
-        const data = (res && res.data) || {}
+        if (controller.signal.aborted || this.aiStreamCancelled) {
+          const stopped = new Error('Generation cancelled')
+          stopped.name = 'AbortError'
+          throw stopped
+        }
         const billing = (data.billing && typeof data.billing === 'object') ? data.billing : data
         const remainingCredits = Number(billing.remaining_credits)
         if (Number.isFinite(remainingCredits)) this.$root.$emit('credits-updated', remainingCredits)
@@ -1475,12 +1524,21 @@ export default {
         this.aiPanelExpanded = true
         this.$nextTick(this.scrollStrategyAiConversation)
       } catch (e) {
+        if (controller.signal.aborted || this.aiStreamCancelled || e.name === 'AbortError') {
+          this.aiMessages.push({ role: 'assistant', content: this.aiStreamText.stopped, message_type: 'discussion', localId: `strategy-stopped-${Date.now()}` })
+          this.$nextTick(this.scrollStrategyAiConversation)
+          return
+        }
         const message = this.localizeStrategyAiError(e)
         this.aiMessages.push({ role: 'assistant', content: message, message_type: 'error', localId: `strategy-error-${Date.now()}` })
         this.$message.error(message)
         this.$nextTick(this.scrollStrategyAiConversation)
       } finally {
         this.aiStrategyGenerating = false
+        this.aiLiveDraft = ''
+        this.aiStreamPhase = ''
+        if (this.aiStreamController === controller) this.aiStreamController = null
+        this.aiStreamRequestId = ''
       }
     },
     isActiveStrategyCandidateMessage (messageItem) {
@@ -3280,6 +3338,20 @@ export default {
   background: #f0f9eb;
 }
 .strategy-ai-message--thinking { opacity: 0.74; }
+.strategy-ai-live-draft {
+  max-height: 280px;
+  overflow: auto;
+  margin: 6px 0;
+  padding: 8px;
+  border: 1px solid rgba(127, 140, 160, 0.2);
+  border-radius: 6px;
+  background: rgba(127, 140, 160, 0.06);
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.strategy-ai-live-warning { color: #ad6800; }
 
 .strategy-ai-candidate {
   display: flex;

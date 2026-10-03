@@ -108,7 +108,7 @@ test('indicator and strategy IDEs expose their AI workspaces without redundant t
   assert.doesNotMatch(strategyIde, /class="ai-strategy-create-button"/)
   assert.match(strategyIde, /#ai-workspace/)
   assert.match(strategyIde, /async sendStrategyAiTurn \(\)/)
-  assert.match(strategyIde, /await runStrategyAiTurn\(/)
+  assert.match(strategyIde, /await streamStrategyWorkspaceTurn\(/)
   assert.match(strategyIde, /previewStrategyAiCandidate/)
   assert.match(strategyIde, /applyStrategyAiCandidate/)
   assert.doesNotMatch(strategyIde, /v-model="showAiStrategyGenerator"/)
