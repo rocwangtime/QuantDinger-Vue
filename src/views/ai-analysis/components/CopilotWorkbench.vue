@@ -3933,6 +3933,10 @@ export default {
     },
     async generateChartIndicatorDraft (prompt, target) {
       this.generatingStrategy = true
+      const controller = this.activeGenerationController || new AbortController()
+      const requestId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : ''
+      this.activeGenerationController = controller
+      this.activeGenerationRequestId = requestId
       const assistantMsg = {
         localId: 'local-' + (localId++),
         role: 'assistant',
@@ -3940,13 +3944,16 @@ export default {
         meta: 'indicator_research'
       }
       this.messages.push(assistantMsg)
+      this.activeAssistantMessage = assistantMsg
       this.scrollToBottom()
       try {
+        if (!requestId) throw new Error('Browser UUID support is required for cancellable generation')
         const agentPrompt = this.buildNativeStrategyGenerationPrompt('indicator', prompt, target)
         const token = this.getAccessToken()
         const language = this.$i18n ? this.$i18n.locale : 'en-US'
         const response = await fetch('/api/indicator/aiGenerate', {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: token ? `Bearer ${token}` : '',
@@ -3957,6 +3964,7 @@ export default {
           },
           credentials: 'include',
           body: JSON.stringify({
+            request_id: requestId,
             prompt: agentPrompt,
             llm_selection: { ...this.llmSelection },
             source: 'copilot_quick_tool',
@@ -3975,6 +3983,7 @@ export default {
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
+          if (controller.signal.aborted || this.generationStopped) break
           buffer += decoder.decode(value, { stream: true })
           const parts = buffer.split('\n\n')
           buffer = parts.pop() || ''
@@ -4000,6 +4009,7 @@ export default {
             }
           }
         }
+        if (controller.signal.aborted || this.generationStopped) return
         const code = this.cleanMarkdownCodeBlocks(generatedCode)
         if (!code) throw new Error('Indicator AI returned empty code')
         assistantMsg.meta = this.text.indicatorGenerated
@@ -4015,14 +4025,21 @@ export default {
         }]
         await this.persistCopilotMessage(assistantMsg, 'indicator_research')
       } catch (e) {
-        console.warn('Indicator generation failed', e)
-        assistantMsg.content = this.i18nText(
-          'aiAssetAnalysis.copilot.indicatorGenerationUnavailable',
-          'Indicator generation service is temporarily unavailable. Please check the backend AI configuration and try again.'
-        )
+        if (!controller.signal.aborted && !this.generationStopped) {
+          console.warn('Indicator generation failed', e)
+          assistantMsg.content = this.i18nText(
+            'aiAssetAnalysis.copilot.indicatorGenerationUnavailable',
+            'Indicator generation service is temporarily unavailable. Please check the backend AI configuration and try again.'
+          )
+        }
       } finally {
         await this.loadBilling()
         this.generatingStrategy = false
+        if (this.activeGenerationController === controller) {
+          this.activeGenerationController = null
+          this.activeGenerationRequestId = ''
+          this.activeAssistantMessage = null
+        }
         this.scrollToBottom()
       }
     },
