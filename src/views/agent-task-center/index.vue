@@ -50,7 +50,7 @@
         <div v-if="!opportunities.length" class="task-empty">{{ copy.noOpportunities }}</div>
         <div v-for="lead in opportunities" :key="lead.id" class="opportunity-row">
           <div class="task-row-main">
-            <strong>{{ lead.market }}:{{ lead.symbol }}</strong>
+            <strong>{{ lead.market }}:{{ lead.symbol }} · {{ lead.analysis && lead.analysis.final_decision }}</strong>
             <small>{{ copy.researchSource }} #{{ lead.run_id }} · {{ displayTime(lead.run_created_at) }}<template v-if="lead.analysis && lead.analysis.confidence != null"> · {{ lead.analysis.confidence }}%</template></small>
             <p v-if="lead.analysis && lead.analysis.reasoning">{{ lead.analysis.reasoning }}</p>
           </div>
@@ -81,10 +81,14 @@
           <div class="task-row-main">
             <div class="task-row-title"><strong>{{ monitor.name || monitorTarget(monitor) }}</strong><span :class="monitor.is_active ? 'status-active' : 'status-paused'">{{ monitor.is_active ? copy.active : copy.paused }}</span></div>
             <p>{{ monitorTarget(monitor) }} · {{ copy.every }} {{ monitorInterval(monitor) }} · {{ copy.runs }} {{ monitor.run_count || 0 }}</p>
+            <p v-if="monitor.config && monitor.config.prompt">{{ monitor.config.prompt.slice(0, 180) }}{{ monitor.config.prompt.length > 180 ? '…' : '' }}</p>
+            <small>{{ monitorCondition(monitor) }}</small>
             <small>{{ copy.lastRun }} {{ displayTime(monitor.last_run_at) }} · {{ monitorResult(monitor) }}<template v-if="monitor.is_active"> · {{ copy.nextRun }} {{ displayTime(monitor.next_run_at) }}</template></small>
           </div>
           <div class="task-row-actions">
             <a-button size="small" icon="history" @click="openMonitorRuns(monitor)">{{ copy.runHistory }}</a-button>
+            <a-button size="small" icon="edit" @click="editResearchMonitor(monitor)">{{ copy.edit }}</a-button>
+            <a-popconfirm :title="copy.runOnceConfirm" :ok-text="copy.runOnce" :cancel-text="copy.cancel" @confirm="runResearchMonitor(monitor)"><a-button size="small" :loading="runningMonitorId === monitor.id">{{ copy.runOnce }}</a-button></a-popconfirm>
             <a-button v-if="monitor.is_active" size="small" icon="pause" :loading="updatingId === monitor.id" @click="toggleMonitor(monitor)">{{ copy.pause }}</a-button>
             <a-popconfirm v-else :title="copy.enableConfirm" :ok-text="copy.enable" :cancel-text="copy.cancel" @confirm="toggleMonitor(monitor)">
               <a-button size="small" icon="caret-right" :loading="updatingId === monitor.id">{{ copy.enable }}</a-button>
@@ -129,8 +133,8 @@
 
     <a-modal
       v-model="createVisible"
-      :title="copy.createMonitor"
-      :ok-text="copy.createPaused"
+      :title="editingMonitor ? copy.edit : copy.createMonitor"
+      :ok-text="editingMonitor ? copy.save : copy.createPaused"
       :cancel-text="copy.cancel"
       :confirm-loading="creating"
       :ok-button-props="{ props: { disabled: !selectedWatchKey } }"
@@ -139,6 +143,7 @@
       <a-form layout="vertical">
         <a-form-item :label="copy.target"><a-select v-model="selectedWatchKey" :placeholder="copy.chooseTarget"><a-select-option v-for="item in watchlist" :key="`${item.market}:${item.symbol}`" :value="`${item.market}:${item.symbol}`">{{ item.market }} · {{ item.symbol }} {{ item.name || '' }}</a-select-option></a-select></a-form-item>
         <a-form-item :label="copy.interval"><a-select v-model="intervalMinutes"><a-select-option :value="60">1 {{ copy.hour }}</a-select-option><a-select-option :value="240">4 {{ copy.hours }}</a-select-option><a-select-option :value="720">12 {{ copy.hours }}</a-select-option><a-select-option :value="1440">1 {{ copy.day }}</a-select-option></a-select></a-form-item>
+        <ResearchTaskFields v-model="researchForm" :market="String(selectedWatchKey || '').split(':')[0]" :is-zh="copy === wordsZh" />
         <a-alert type="info" show-icon :message="copy.createBoundary" />
       </a-form>
     </a-modal>
@@ -152,6 +157,8 @@
           <p v-else-if="run.result">{{ copy.analyzed }} {{ run.result.analyzed_count || 0 }} / {{ run.result.position_count || 0 }}</p>
           <div v-for="item in ((run.result && run.result.position_analyses) || [])" :key="`${item.market}:${item.symbol}`" class="task-run-symbol">
             <div><strong>{{ item.market }}:{{ item.symbol }}</strong><small>{{ item.error || item.final_decision || copy.noResult }}<template v-if="item.confidence != null && !item.error"> · {{ item.confidence }}%</template></small></div>
+            <p v-if="item.reasoning">{{ item.reasoning }}</p>
+            <small v-if="item.risk_report">{{ item.risk_report }}</small>
             <a-popconfirm v-if="candidateFor(run, item)" :title="copy.candidateConfirm" :ok-text="copy.generateCandidate" :cancel-text="copy.cancel" @confirm="generateCandidate(run, item)">
               <a-button size="small" type="link" :loading="candidateLoadingKey === `${run.id}:${item.market}:${item.symbol}`">{{ copy.generateCandidate }} →</a-button>
             </a-popconfirm>
@@ -164,7 +171,9 @@
 
 <script>
 import { mapState } from 'vuex'
-import { getMonitors, getMonitorRuns, getResearchOpportunities, updateResearchOpportunity, addMonitor, updateMonitor } from '@/api/portfolio'
+import { getMonitors, getMonitorRuns, getResearchOpportunities, updateResearchOpportunity, addMonitor, updateMonitor, runMonitor } from '@/api/portfolio'
+import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
+import { researchTaskForm, researchTaskConfig } from '@/utils/researchWorkflow.mjs'
 import { getWatchlist } from '@/api/market'
 import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory, aiGenerateStrategy } from '@/api/strategy'
 import { researchCandidateFromRun, buildResearchStrategyPrompt } from './researchCandidate'
@@ -179,8 +188,13 @@ const words = {
 }
 
 Object.assign(words.zh, {
+  monitorHint: '按间隔检查时段与价格条件；条件满足后让 Agent 按研究目标重新分析。',
+  createBoundary: '研究任务默认暂停，可单次测试。时段与价格条件不满足时不调用模型，不会下单。',
+  runOnce: '运行一次',
+runOnceConfirm: '单次研究会遵守时段/价格条件，满足后调用 AI，可能产生费用；不会下单。',
+save: '保存',
   opportunityTitle: '研究线索待审',
-  opportunityHint: '定时研究发现的美股/港股看多线索，先人工审阅，再决定是否开发策略。',
+  opportunityHint: '来自定时研究的买入 / 减仓线索；SELL 表示退出风险，不是做空指令。',
   opportunityNew: '待审',
   opportunityReviewed: '已阅',
   opportunityDismissed: '已忽略',
@@ -191,8 +205,13 @@ Object.assign(words.zh, {
   reopenOpportunity: '重新待审'
 })
 Object.assign(words.en, {
+  monitorHint: 'Check session and price conditions at each interval; the agent re-evaluates your research brief when met.',
+  createBoundary: 'New tasks start paused. Run once to test; unmet gates skip AI. These tasks never place orders.',
+  runOnce: 'Run once',
+runOnceConfirm: 'Run once respecting session/price gates. AI may incur costs; no orders will be placed.',
+save: 'Save',
   opportunityTitle: 'Research leads',
-  opportunityHint: 'US/HK bullish leads from scheduled research. Review before developing a strategy.',
+  opportunityHint: 'Buy / exit leads from scheduled research. SELL is an exit warning, not a short-sale instruction.',
   opportunityNew: 'New',
   opportunityReviewed: 'Reviewed',
   opportunityDismissed: 'Dismissed',
@@ -205,10 +224,12 @@ Object.assign(words.en, {
 
 export default {
   name: 'AgentTaskCenter',
+  components: { ResearchTaskFields },
   data () {
-    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
+    return { researchForm: researchTaskForm(), editingMonitor: null, runningMonitorId: null, loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
   },
   computed: {
+    wordsZh () { return words.zh },
     ...mapState({ navTheme: state => state.app.theme }),
     isDarkTheme () { return this.navTheme === 'dark' || this.navTheme === 'realdark' },
     copy () { return String(this.$i18n && this.$i18n.locale || '').toLowerCase().startsWith('zh') ? words.zh : words.en },
@@ -348,23 +369,53 @@ export default {
     openBacktest (id) { this.$router.push({ path: '/backtest-center', query: id ? { sourceId: id } : {} }) },
     openAccounts () { this.$router.push('/broker-accounts') },
     researchWatch (item) { this.$router.push({ path: '/ai-asset-analysis', query: { market: item.market, symbol: item.symbol, copilotPrompt: this.copy === words.zh ? `研究 ${item.market}:${item.symbol} 的近期机会与风险，请注明数据时效和依据，不要下单。` : `Research opportunities and risks for ${item.market}:${item.symbol}. Cite data freshness and evidence. Do not place orders.` } }) },
-    openCreateMonitor () { this.selectedWatchKey = undefined; this.intervalMinutes = 240; this.createVisible = true },
+    openCreateMonitor () { this.editingMonitor = null; this.researchForm = researchTaskForm(); this.selectedWatchKey = undefined; this.intervalMinutes = 240; this.createVisible = true },
+    editResearchMonitor (monitor) {
+      this.editingMonitor = monitor
+      this.selectedWatchKey = `${monitor.config.market}:${monitor.config.symbol}`
+      this.intervalMinutes = monitor.config.run_interval_minutes || 60
+      this.researchForm = researchTaskForm(monitor.config)
+      this.createVisible = true
+    },
+    monitorCondition (monitor) {
+      const config = monitor.config || {}
+      const zh = this.copy === words.zh
+      const window = { always: zh ? '不限时段' : 'Any time', regular: zh ? '常规交易时段' : 'Regular session', after_close: zh ? '收盘后 1 小时' : 'First hour after close' }[config.session_window || 'always']
+      const trigger = config.trigger || { type: 'scheduled' }
+      return window + ' · ' + (trigger.type === 'scheduled' ? (zh ? '按间隔分析' : 'Scheduled') : `${trigger.type === 'price_above' ? '≥' : '≤'} ${trigger.price}`)
+    },
+    async runResearchMonitor (monitor) {
+      if (this.runningMonitorId) return
+      this.runningMonitorId = monitor.id
+      try {
+        const result = await runMonitor(monitor.id)
+        if (!result || result.code !== 1) throw new Error((result && result.msg) || this.copy.actionError)
+        this.$message.success(this.copy === words.zh ? '已提交单次研究，请在运行记录中查看结果；定时启用状态不变。' : 'Run submitted. Check run history; the schedule state is unchanged.')
+        await this.loadAll()
+        await this.openMonitorRuns(monitor)
+      } catch (error) { this.$message.error(error.message || this.copy.actionError) } finally { this.runningMonitorId = null }
+    },
     async createMonitor () {
       const item = this.watchlist.find(watch => `${watch.market}:${watch.symbol}` === this.selectedWatchKey)
       if (!item || this.creating) return
       this.creating = true
       try {
-        const result = await addMonitor({
+        const payload = {
           name: `AI-${item.symbol}-${this.intervalMinutes}m`,
           position_ids: [],
           monitor_type: 'ai',
-          config: { market: item.market, symbol: item.symbol, run_interval_minutes: this.intervalMinutes, language: this.$i18n.locale },
+          config: { ...((this.editingMonitor && this.editingMonitor.config) || {}), ...researchTaskConfig(this.researchForm), market: item.market, symbol: item.symbol, run_interval_minutes: this.intervalMinutes, language: this.$i18n.locale },
           notification_config: { channels: ['browser'] },
           is_active: false
-        })
+        }
+        if (this.editingMonitor) {
+          delete payload.is_active
+          delete payload.notification_config
+        }
+        const result = this.editingMonitor ? await updateMonitor(this.editingMonitor.id, payload) : await addMonitor(payload)
         if (!result || result.code !== 1) throw new Error((result && result.msg) || this.copy.actionError)
         this.createVisible = false
-        this.$message.success(this.copy.created)
+        this.$message.success(this.editingMonitor ? this.copy.updated : this.copy.created)
         await this.loadAll()
       } catch (error) {
         this.$message.error((error && error.message) || this.copy.actionError)
