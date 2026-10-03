@@ -8,6 +8,7 @@ const read = path => fs.readFileSync(fileURLToPath(new URL(path, import.meta.url
 const taskCenter = read('../../src/views/agent-task-center/index.vue')
 const portfolioApi = read('../../src/api/portfolio.js')
 const strategyIde = read('../../src/views/strategy-ide/index.vue')
+const strategyStream = read('../../src/api/strategyDraftStream.js')
 
 const run = {
   id: 42,
@@ -50,8 +51,8 @@ test('candidate prompt treats report as historical data and never authorizes tra
 })
 
 test('task center uses the validated generator and carries research origin into the editor', () => {
-  assert.match(taskCenter, /aiGenerateStrategy\(\{/)
-  assert.match(taskCenter, /data\.validation && data\.validation\.success/)
+  assert.match(taskCenter, /streamStrategyDraft\(\{/)
+  assert.match(strategyStream, /verifyStrategyCode\(\{ code: finished\.code \}, signal\)/)
   assert.match(taskCenter, /research_origin: \{/)
   assert.match(taskCenter, /copilotBacktest: '1'/)
   assert.match(strategyIde, /research_origin: \{ \.\.\.this\.researchOrigin \}/)

@@ -911,7 +911,7 @@ export default {
     },
     baseAsset () {
       const symbol = String(this.currentSymbol || '').replace(/^[^:]+:/, '')
-      return (symbol.split(/[\/_-]/)[0] || '').toUpperCase() || '-'
+      return (symbol.split(/[/_-]/)[0] || '').toUpperCase() || '-'
     },
     estimatedNotionalUsdt () {
       const amount = Math.max(0, Number(this.amount) || 0)

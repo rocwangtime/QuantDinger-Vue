@@ -547,6 +547,11 @@
           <a-icon type="info-circle" />
           <span>{{ text.indicatorConvertBoundary }}</span>
         </div>
+        <div v-if="indicatorConvertLoading" class="indicator-convert-stream">
+          <span>{{ indicatorConvertPhase === 'validation' ? '正在校验策略契约…' : (indicatorConvertPhase === 'saving' ? '正在保存已校验草稿…' : '正在流式生成未校验草稿…') }}</span>
+          <pre v-if="indicatorConvertDraft">{{ indicatorConvertDraft }}</pre>
+          <a-button v-if="indicatorConvertPhase !== 'saving'" size="small" icon="stop" @click="closeIndicatorConvertModal">停止生成</a-button>
+        </div>
         <a-alert
           v-if="indicatorConvertError"
           type="error"
@@ -672,7 +677,6 @@ import {
   sanitizeRuntimeConfigForSource
 } from './components/scriptTemplateCatalog'
 import {
-  aiGenerateStrategy,
   clearStrategyAiWorkspace,
   createScriptSource,
   deleteScriptSource,
@@ -690,6 +694,7 @@ import {
   updateScriptSource,
   verifyStrategyCode
 } from '@/api/strategy'
+import { streamStrategyDraft, cancelStrategyDraft } from '@/api/strategyDraftStream'
 
 const EMPTY_DRAFT_CODE = ''
 const createDefaultRunConfig = () => ({
@@ -779,6 +784,10 @@ export default {
       indicatorConvertContext: null,
       indicatorConvertInstruction: '',
       indicatorConvertError: '',
+      indicatorConvertDraft: '',
+      indicatorConvertPhase: '',
+      indicatorConvertController: null,
+      indicatorConvertRequestId: '',
       runConfig: createDefaultRunConfig(),
       strategySymbolOptions: [],
       strategyWatchlistOptions: [],
@@ -2682,9 +2691,13 @@ export default {
       }
       this.indicatorConvertLoading = true
       this.indicatorConvertError = ''
+      this.indicatorConvertDraft = ''
+      this.indicatorConvertPhase = 'generation'
+      const controller = new AbortController()
+      this.indicatorConvertController = controller
       try {
         const source = this.resolveIndicatorConversionContext(ctx)
-        const res = await aiGenerateStrategy({
+        const draft = await streamStrategyDraft({
           llm_selection: { ...this.llmSelection },
           prompt: this.buildIndicatorConversionPrompt(),
           assetType: 'script',
@@ -2696,9 +2709,15 @@ export default {
             instrument: source.instrument,
             timeframe: source.timeframe
           }
+        }, {
+          signal: controller.signal,
+          onRequestId: id => { this.indicatorConvertRequestId = id },
+          onDelta: (text, phase) => { this.indicatorConvertPhase = phase; this.indicatorConvertDraft += text },
+          onProgress: phase => { this.indicatorConvertPhase = phase; if (phase === 'full_fallback') this.indicatorConvertDraft = '' }
         })
-        const code = this.extractAiGeneratedCode(res)
-        if (!code) throw new Error((res && res.msg) || this.text.indicatorConvertFailed)
+        if (controller.signal.aborted) return
+        const code = draft.code
+        this.indicatorConvertPhase = 'saving'
         const created = await createScriptSource({
           name: this.extractScriptMetadataFromCode(code).name || `${ctx.name || this.text.defaultIndicatorName} Strategy`,
           description: this.extractScriptMetadataFromCode(code).description || `AI converted from indicator: ${ctx.name || this.text.defaultIndicatorName}`,
@@ -2712,9 +2731,16 @@ export default {
         this.finishIndicatorConversion(sourceId)
         this.$message.success(this.text.indicatorConvertSuccess)
       } catch (e) {
+        if (e && (e.name === 'AbortError' || controller.signal.aborted)) return
         this.indicatorConvertError = this.localizeStrategyAiError(e)
       } finally {
-        this.indicatorConvertLoading = false
+        if (this.indicatorConvertController === controller) {
+          this.indicatorConvertLoading = false
+          this.indicatorConvertController = null
+          this.indicatorConvertRequestId = ''
+          this.indicatorConvertPhase = ''
+          this.indicatorConvertDraft = ''
+        }
       }
     },
     extractAiGeneratedCode (res) {
@@ -2749,7 +2775,11 @@ export default {
       }
     },
     closeIndicatorConvertModal () {
-      if (this.indicatorConvertLoading) return
+      if (this.indicatorConvertLoading && this.indicatorConvertPhase === 'saving') return
+      if (this.indicatorConvertController) {
+        this.indicatorConvertController.abort()
+        cancelStrategyDraft(this.indicatorConvertRequestId)
+      }
       this.showIndicatorConvertModal = false
       this.indicatorConvertError = ''
       this.clearIndicatorConvertSession()
@@ -4178,6 +4208,16 @@ export default {
   .indicator-convert-note .anticon {
     margin-top: 3px;
     color: #2563eb;
+  }
+
+  .indicator-convert-stream pre {
+    max-height: 220px;
+    overflow: auto;
+    padding: 10px;
+    white-space: pre-wrap;
+    background: #111827;
+    color: #dbeafe;
+    font-size: 12px;
   }
 }
 

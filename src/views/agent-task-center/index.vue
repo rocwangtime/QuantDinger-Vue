@@ -186,6 +186,11 @@
         </div>
       </a-spin>
     </a-drawer>
+    <a-modal :visible="!!candidateLoadingKey" :title="copy.generateCandidate" :footer="null" :closable="false" :mask-closable="false">
+      <p>{{ candidatePhase === 'validation' ? (copy === wordsZh ? '正在校验策略契约…' : 'Checking strategy contract…') : (copy === wordsZh ? '正在流式生成草稿；校验完成前不可运行。' : 'Streaming a draft; it cannot run before validation.') }}</p>
+      <pre v-if="candidateDraft" class="candidate-stream-preview">{{ candidateDraft }}</pre>
+      <a-button icon="stop" @click="stopCandidateGeneration">{{ copy === wordsZh ? '停止生成' : 'Stop generation' }}</a-button>
+    </a-modal>
   </div>
 </template>
 
@@ -195,7 +200,8 @@ import { getMonitors, getMonitorRuns, getResearchOpportunities, updateResearchOp
 import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
 import { researchTaskForm, researchTaskConfig } from '@/utils/researchWorkflow.mjs'
 import { getWatchlist } from '@/api/market'
-import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory, aiGenerateStrategy } from '@/api/strategy'
+import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory } from '@/api/strategy'
+import { streamStrategyDraft, cancelStrategyDraft } from '@/api/strategyDraftStream'
 import { researchCandidateFromRun, buildResearchStrategyPrompt } from './researchCandidate'
 
 const words = {
@@ -247,7 +253,7 @@ export default {
   components: { ResearchTaskFields },
   props: { workspaceMode: { type: String, default: 'overview' } },
   data () {
-    return { researchForm: researchTaskForm(), editingMonitor: null, runningMonitorId: null, loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
+    return { researchForm: researchTaskForm(), editingMonitor: null, runningMonitorId: null, loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', candidateDraft: '', candidatePhase: '', candidateController: null, candidateRequestId: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
   },
   computed: {
     monitorMode () { return this.workspaceMode === 'monitor' },
@@ -341,22 +347,35 @@ export default {
       } catch (_) { return null }
     },
     candidateFor (run, item) { return researchCandidateFromRun(run, item) },
+    async stopCandidateGeneration () {
+      const requestId = this.candidateRequestId
+      if (this.candidateController) this.candidateController.abort()
+      this.candidateLoadingKey = ''
+      this.candidateDraft = ''
+      await cancelStrategyDraft(requestId)
+    },
     async generateCandidate (run, item, originMonitorId = 0) {
       const candidate = this.candidateFor(run, item)
       if (!candidate || this.candidateLoadingKey) return
       this.candidateLoadingKey = `${run.id}:${item.market}:${item.symbol}`
+      const controller = new AbortController()
+      this.candidateController = controller
+      this.candidateDraft = ''
+      this.candidatePhase = 'generation'
       try {
-        const res = await aiGenerateStrategy({
+        const data = await streamStrategyDraft({
           prompt: buildResearchStrategyPrompt(candidate, this.copy === words.zh ? 'zh' : 'en'),
           assetType: 'script',
           generationMode: 'authoring',
           existingCode: '',
           context: { source: 'scheduled_research', instrument: `${candidate.market}:${candidate.symbol}`, timeframe: '1D' }
+        }, {
+          signal: controller.signal,
+          onRequestId: id => { this.candidateRequestId = id },
+          onDelta: (text, phase) => { this.candidatePhase = phase; this.candidateDraft += text },
+          onProgress: phase => { this.candidatePhase = phase; if (phase === 'full_fallback') this.candidateDraft = '' }
         })
-        const data = (res && res.data) || {}
-        if (!(res && res.code === 1 && typeof data.code === 'string' && data.code.trim() && data.validation && data.validation.success)) {
-          throw new Error((res && res.msg) || this.copy.candidateFailed)
-        }
+        if (controller.signal.aborted) return
         sessionStorage.setItem('qd_strategy_source', data.code)
         sessionStorage.setItem('qd_copilot_script_strategy_meta', JSON.stringify({
           market: candidate.market,
@@ -372,8 +391,17 @@ export default {
         this.runsVisible = false
         await this.$router.push({ path: '/strategy-ide', query: { tab: 'script', draft: '1', copilotBacktest: '1' } })
       } catch (error) {
+        if (error && (error.name === 'AbortError' || controller.signal.aborted)) return
         this.$message.error((error && (error.backendMessage || error.message)) || this.copy.candidateFailed)
-      } finally { this.candidateLoadingKey = '' }
+      } finally {
+        if (this.candidateController === controller) {
+          this.candidateLoadingKey = ''
+          this.candidateDraft = ''
+          this.candidatePhase = ''
+          this.candidateRequestId = ''
+          this.candidateController = null
+        }
+      }
     },
     async openMonitorRuns (monitor) {
       this.selectedMonitor = monitor
@@ -512,6 +540,7 @@ export default {
 .task-run-symbol p { margin: 0; font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; white-space: pre-wrap; }
 .task-run-risks { padding: 12px; border: 1px solid var(--task-border); border-radius: 8px; }
 .task-run-risks strong { display: block; margin-bottom: 8px; }
+.candidate-stream-preview { max-height: 280px; overflow: auto; padding: 12px; white-space: pre-wrap; background: #111820; color: #d8e4ef; font-size: 12px; }
 .task-run-symbol small { display: block; color: var(--task-muted); }
 .task-row-title { display: flex; align-items: center; gap: 9px; }
 .task-row-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
