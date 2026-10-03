@@ -1,12 +1,12 @@
 export function researchTaskForm (config = {}) {
-  return { prompt: config.prompt || config.focus_conditions || '', session_window: config.session_window || 'always', trigger_type: (config.trigger && config.trigger.type) || 'scheduled', trigger_price: config.trigger && config.trigger.price }
+  return { ...(config.llm_selection ? { llm_selection: { ...config.llm_selection } } : {}), prompt: config.prompt || config.focus_conditions || '', session_window: config.session_window || 'always', trigger_type: (config.trigger && config.trigger.type) || 'scheduled', trigger_price: config.trigger && config.trigger.price }
 }
 
 export function researchTaskConfig (form) {
   const kind = form.trigger_type || 'scheduled'
   const price = Number(form.trigger_price)
   if (kind !== 'scheduled' && (!Number.isFinite(price) || price <= 0)) throw new Error('请填写大于 0 的触发价格 / Enter a positive trigger price')
-  return { prompt: String(form.prompt || '').trim().slice(0, 12000), session_window: form.session_window || 'always', trigger: kind === 'scheduled' ? { type: kind } : { type: kind, price } }
+  return { ...(form.llm_selection ? { llm_selection: { ...form.llm_selection } } : {}), prompt: String(form.prompt || '').trim().slice(0, 12000), session_window: form.session_window || 'always', trigger: kind === 'scheduled' ? { type: kind } : { type: kind, price } }
 }
 
 export function validatedStrategyCode (response) {

@@ -1,5 +1,8 @@
 <template>
   <div>
+    <a-form-item :label="isZh ? '此任务的 Agent 模型（随任务保存）' : 'Agent model (saved with this task)'">
+      <AgentModelSelect :value="value.llm_selection || {}" @input="set('llm_selection', $event)" />
+    </a-form-item>
     <a-form-item :label="isZh ? '持续分析目标 / 入场与退出条件' : 'Research brief / entry and exit criteria'">
       <a-textarea :value="value.prompt" :rows="5" :max-length="12000" :placeholder="isZh ? '每次检查哪些条件？什么情况下买入、减仓或继续观望？这段内容会传给 Agent。' : 'What should the agent evaluate on every run?'" @input="set('prompt', $event.target.value)" />
     </a-form-item>
@@ -22,8 +25,10 @@
   </div>
 </template>
 <script>
+import AgentModelSelect from '@/components/AgentModelSelect.vue'
 export default {
   name: 'ResearchTaskFields',
+  components: { AgentModelSelect },
   props: { value: { type: Object, required: true }, market: { type: String, default: '' }, isZh: Boolean },
   computed: { isStock () { return ['USStock', 'HKStock'].includes(this.market) } },
   methods: { set (key, value) { this.$emit('input', { ...this.value, [key]: value }) } }

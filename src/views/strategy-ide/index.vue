@@ -314,6 +314,7 @@
                   </div>
 
                   <div class="strategy-ai-composer">
+                    <AgentModelSelect v-model="llmSelection" remember :disabled="aiStrategyGenerating" @ready="modelSelectionReady = $event" />
                     <a-textarea
                       ref="strategyAiPrompt"
                       v-model="aiStrategyPrompt"
@@ -329,7 +330,7 @@
                         type="primary"
                         class="strategy-ai-send"
                         :loading="aiStrategyGenerating"
-                        :disabled="!String(aiStrategyPrompt || '').trim() || scriptCodeHidden"
+                        :disabled="!modelSelectionReady || !String(aiStrategyPrompt || '').trim() || scriptCodeHidden"
                         @click="sendStrategyAiTurn"
                       >{{ aiWorkspaceText.send }}</a-button>
                     </div>
@@ -655,6 +656,7 @@
 <script>
 import { mapState } from 'vuex'
 import StrategyEditor from './components/StrategyEditor.vue'
+import AgentModelSelect from '@/components/AgentModelSelect.vue'
 import FactorLibraryModal from './FactorLibraryModal.vue'
 import UniverseLibraryModal from './UniverseLibraryModal.vue'
 import ExecutorStrategies from '@/views/executor-strategies'
@@ -704,6 +706,7 @@ const createDefaultRunConfig = () => ({
 export default {
   name: 'StrategyIde',
   components: {
+    AgentModelSelect,
     StrategyEditor,
     FactorLibraryModal,
     UniverseLibraryModal,
@@ -713,6 +716,8 @@ export default {
   data () {
     return {
       scriptSources: [],
+      llmSelection: {},
+      modelSelectionReady: false,
       loadingScripts: false,
       selectedScriptId: undefined,
       strategySourceDropdownVisible: false,
@@ -1396,6 +1401,7 @@ export default {
       if (!this.aiStrategyGenerating && String(this.aiStrategyPrompt || '').trim()) this.sendStrategyAiTurn()
     },
     async sendStrategyAiTurn () {
+      if (!this.modelSelectionReady) return
       const prompt = String(this.aiStrategyPrompt || '').trim()
       if (!prompt || this.aiStrategyGenerating || this.scriptCodeHidden) return
       const existingCode = this.getCurrentScriptCode()
@@ -1415,6 +1421,7 @@ export default {
       this.$nextTick(this.scrollStrategyAiConversation)
       try {
         const res = await runStrategyAiTurn({
+          llm_selection: { ...this.llmSelection },
           sourceId: Number(this.currentSourceId || 0),
           assetType: this.currentAssetType,
           prompt,
@@ -2678,6 +2685,7 @@ export default {
       try {
         const source = this.resolveIndicatorConversionContext(ctx)
         const res = await aiGenerateStrategy({
+          llm_selection: { ...this.llmSelection },
           prompt: this.buildIndicatorConversionPrompt(),
           assetType: 'script',
           generationMode: 'indicator_conversion',

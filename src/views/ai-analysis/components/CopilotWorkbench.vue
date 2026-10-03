@@ -323,6 +323,7 @@
             </div>
           </div>
         </div>
+        <AgentModelSelect v-model="llmSelection" remember :disabled="sending || generatingStrategy || analyzingSymbol" @ready="modelSelectionReady = $event" />
         <textarea
           ref="composerInput"
           v-model="draft"
@@ -709,6 +710,8 @@ import {
 } from '@/api/market'
 import { aiGenerateStrategy } from '@/api/strategy'
 import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
+import AgentModelSelect from '@/components/AgentModelSelect.vue'
+import { reasoningLabel } from '@/utils/agentModelSelection.mjs'
 import { researchTaskForm, researchTaskConfig, validatedStrategyCode, nextSessionRadar } from '@/utils/researchWorkflow.mjs'
 import { getEconomicCalendar } from '@/api/global-market'
 import { getMembershipPlans } from '@/api/billing'
@@ -738,6 +741,7 @@ let localId = 1
 export default {
   name: 'CopilotWorkbench',
   components: {
+    AgentModelSelect,
     ResearchTaskFields,
     ProfessionalAnalysisReport
   },
@@ -752,6 +756,8 @@ export default {
       symbolSearching: false,
       symbolSearchTimer: null,
       draft: '',
+      llmSelection: {},
+      modelSelectionReady: false,
       attachments: [],
       messages: [],
       sessions: [],
@@ -1277,7 +1283,7 @@ export default {
       return `${chat + img} credits`
     },
     canSend () {
-      return !this.sending && (this.draft.trim().length > 0 || this.attachments.length > 0)
+      return this.modelSelectionReady && !this.sending && !this.generatingStrategy && (this.draft.trim().length > 0 || this.attachments.length > 0)
     },
     currentContextLabel () {
       const target = this.normalizeSymbolOption(this.context)
@@ -2163,7 +2169,11 @@ export default {
     },
     async loadAgentPreflight () {
       try {
-        const res = await getAgentPreflight()
+        const res = await getAgentPreflight(this.llmSelection.provider
+? {
+          llm_provider: this.llmSelection.provider, llm_model: this.llmSelection.model, reasoning_effort: this.llmSelection.reasoning_effort
+        }
+: undefined)
         this.agentPreflight = res.data || res
       } catch (_) {
         this.agentPreflight = null
@@ -2514,14 +2524,15 @@ export default {
     llmUsageForMessage (msg) {
       const actions = Array.isArray(msg && msg.actions) ? msg.actions : []
       const action = actions.find(item => item && item.type === 'llm_usage')
-      return action && action.payload && Number.isFinite(Number(action.payload.total_tokens)) ? action.payload : null
+      const usage = (action && action.payload) || (msg && msg.report && msg.report.runtime && msg.report.runtime.llm_usage)
+      return usage && Number.isFinite(Number(usage.total_tokens)) ? usage : null
     },
     llmUsageText (msg) {
       const usage = this.llmUsageForMessage(msg)
       if (!usage) return ''
       const tokens = Number(usage.total_tokens || 0).toLocaleString()
       const prefix = usage.token_source === 'provider' ? '' : (this.isZh ? '约 ' : '~')
-      const model = [usage.provider, usage.model].filter(Boolean).join(' · ')
+      const model = [usage.provider, usage.model, reasoningLabel(usage.reasoning_effort || 'default', this.isZh)].filter(Boolean).join(' · ')
       const cost = usage.estimated_cost == null
         ? (this.isZh ? '费用暂无报价' : 'cost unavailable')
         : `${this.isZh ? '预估' : 'est.'} ${usage.currency === 'CNY' ? '¥' : '$'}${Number(usage.estimated_cost).toFixed(6)}`
@@ -2878,6 +2889,7 @@ export default {
           position_ids: [],
           monitor_type: 'ai',
           config: {
+            llm_selection: { ...this.llmSelection },
             run_interval_minutes: interval,
             symbol: target.symbol,
             market: target.market,
@@ -3256,6 +3268,7 @@ export default {
     },
     async fetchProfessionalAnalysis (target) {
       const res = await fastAnalyze({
+        llm_selection: { ...this.llmSelection },
         market: target.market,
         symbol: target.symbol,
         exchange_id: target.exchange_id || '',
@@ -3678,6 +3691,7 @@ export default {
       const resolvedSymbol = contextLock || await this.resolveMessageSymbol(content)
       const context = this.buildChatContext(content, resolvedSymbol)
       const res = await classifyAgentIntent({
+        llm_selection: { ...this.llmSelection },
         message: content,
         attachments,
         context,
@@ -3879,6 +3893,7 @@ export default {
           credentials: 'include',
           body: JSON.stringify({
             prompt: agentPrompt,
+            llm_selection: { ...this.llmSelection },
             source: 'copilot_quick_tool',
             context: {
               source: 'copilot_quick_tool',
@@ -3961,6 +3976,7 @@ export default {
         // generic crypto/shorting examples into stock capability detection.
         const agentPrompt = `Target: ${this.strategyPromptTarget(target)}\n${prompt}`
         const res = await aiGenerateStrategy({
+          llm_selection: { ...this.llmSelection },
           prompt: agentPrompt,
           context: { market: target.market, symbol: target.symbol },
           intent: 'generate_code',
@@ -4024,7 +4040,7 @@ export default {
     openTaskModal (item) {
       this.taskTarget = item ? this.normalizeSymbolOption(item) : this.normalizeSymbolOption(this.context)
       this.taskForm = { interval_min: 240, notify_channels: [] }
-      this.taskResearchForm = researchTaskForm()
+      this.taskResearchForm = researchTaskForm({ llm_selection: { ...this.llmSelection } })
       this.taskModalVisible = true
     },
     async saveMonitor () {
@@ -4242,6 +4258,7 @@ export default {
       }
       try {
         const res = await chatMessage({
+          llm_selection: { ...this.llmSelection },
           session_id: this.sessionId,
           message: content,
           attachments,
@@ -4434,6 +4451,7 @@ export default {
         credentials: 'include',
         body: JSON.stringify({
           session_id: this.sessionId,
+          llm_selection: { ...this.llmSelection },
           message: content,
           attachments,
           context: chatContext || this.buildChatContext(content),

@@ -178,10 +178,15 @@ export function getCopilotEventSummary () {
   })
 }
 
-export function getAgentPreflight () {
+export function getAgentModels () {
+  return request({ url: '/api/ai/agent/models', method: 'get' })
+}
+
+export function getAgentPreflight (params) {
   return request({
     url: marketApi.AgentPreflight,
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
