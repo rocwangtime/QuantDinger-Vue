@@ -6,6 +6,7 @@ import { researchCandidateFromRun, buildResearchStrategyPrompt } from '../../src
 
 const read = path => fs.readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8')
 const taskCenter = read('../../src/views/agent-task-center/index.vue')
+const portfolioApi = read('../../src/api/portfolio.js')
 const strategyIde = read('../../src/views/strategy-ide/index.vue')
 
 const run = {
@@ -55,4 +56,14 @@ test('task center uses the validated generator and carries research origin into 
   assert.match(taskCenter, /copilotBacktest: '1'/)
   assert.match(strategyIde, /research_origin: \{ \.\.\.this\.researchOrigin \}/)
   assert.match(strategyIde, /Historical research is not current market data or trading authorization/)
+})
+
+test('research leads have a persistent review workflow without execution controls', () => {
+  assert.match(portfolioApi, /export function getResearchOpportunities/)
+  assert.match(portfolioApi, /export function updateResearchOpportunity/)
+  assert.match(taskCenter, /getResearchOpportunities\(this\.opportunityFilter\)/)
+  assert.match(taskCenter, /updateResearchOpportunity\(lead\.id, status\)/)
+  assert.match(taskCenter, /generateCandidate\(opportunityRun\(lead\), lead\.analysis, lead\.monitor_id\)/)
+  assert.match(taskCenter, /monitor_id: Number\(originMonitorId/)
+  assert.match(taskCenter, /研究线索是历史 AI 观点，不是实时信号、投资建议或交易授权/)
 })
