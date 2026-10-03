@@ -13,13 +13,26 @@ test('strategy AI collaboration is inline, candidate-first and available to both
   const page = read('src/views/strategy-ide/index.vue')
   assert.match(page, /<template #ai-workspace>/)
   assert.match(page, /currentAssetType === 'portfolio_strategy' \? aiWorkspaceText\.portfolioContract : aiWorkspaceText\.ctaContract/)
-  assert.match(page, /runStrategyAiTurn/)
+  assert.match(page, /streamStrategyWorkspaceTurn/)
+  assert.match(page, /stopStrategyAiTurn/)
+  assert.match(page, /aiStreamText\.unvalidated/)
   assert.match(page, /previewStrategyAiCandidate/)
   assert.match(page, /applyStrategyAiCandidate/)
   assert.match(page, /discardStrategyAiCandidate/)
   assert.match(page, /:disabled="!aiCandidateValidationPassed"/)
   assert.match(page, /message_type: data\.reply_type === 'candidate'/)
   assert.doesNotMatch(page, /showAiStrategyGenerator/)
+})
+
+test('strategy workspace streams and cancels with a server request id', () => {
+  const api = read('src/api/strategyWorkspaceStream.js')
+  const page = read('src/views/strategy-ide/index.vue')
+  assert.match(api, /ai-workspace\/turn\/stream/)
+  assert.match(api, /request_id: requestId/)
+  assert.match(api, /name === 'delta'/)
+  assert.match(api, /name === 'cancelled'/)
+  assert.match(page, /cancelStrategyWorkspaceTurn\(this\.aiStreamRequestId\)/)
+  assert.match(page, /controller\.signal\.aborted \|\| this\.aiStreamCancelled/)
 })
 
 test('strategy AI refreshes the visible credit balance from billing metadata', () => {
