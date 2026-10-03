@@ -904,9 +904,24 @@ export default {
     },
     async syncRouteSource ({ fallback = false, forceReload = false, preserveParams = false } = {}) {
       const routeSourceId = Number(this.$route.query.sourceId)
-      const routeSource = Number.isFinite(routeSourceId) && routeSourceId > 0
+      const hasExplicitSource = Number.isFinite(routeSourceId) && routeSourceId > 0
+      // This page is kept alive while the Agent/IDE creates a new source. A
+      // stale list must never silently substitute another strategy for it.
+      if (hasExplicitSource && !this.sources.some(item => Number(item.id) === routeSourceId)) {
+        await this.loadSources()
+      }
+      const routeSource = hasExplicitSource
         ? this.sources.find(item => Number(item.id) === routeSourceId)
         : null
+      if (hasExplicitSource && !routeSource) {
+        this.form.sourceId = null
+        this.source = null
+        this.manifest = null
+        this.result = null
+        this.factorResult = null
+        this.runError = this.$t('strategyV2.sourceNotFound')
+        return
+      }
       if (routeSource && this.mode === 'portfolio') {
         this.sourceCategory = routeSource.asset_type === 'portfolio_strategy' ? 'portfolio_strategy' : 'script'
       }

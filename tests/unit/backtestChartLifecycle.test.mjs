@@ -28,6 +28,11 @@ test('failed backtests keep a visible explanation until retry or a saved result 
   assert.match(source, /this\.running = true\s+this\.runError = ''/)
 })
 
+test('new Agent source IDs refresh a cached workbench instead of running an older strategy', () => {
+  assert.match(source, /hasExplicitSource && !this\.sources\.some[\s\S]*?await this\.loadSources\(\)/)
+  assert.match(source, /hasExplicitSource && !routeSource[\s\S]*?this\.form\.sourceId = null[\s\S]*?return/)
+})
+
 test('backtest center compiles a source manifest before accepting runtime controls', () => {
   assert.match(source, /compileScriptSource\(\{ sourceId \}\)/)
   assert.match(source, /this\.manifest = compiled\.data && compiled\.data\.manifest/)
