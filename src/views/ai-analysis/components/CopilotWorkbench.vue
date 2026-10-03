@@ -208,7 +208,7 @@
               <button v-if="isStrategyCodeMessage(msg)" type="button" class="message-primary-action" @click="reviewStrategyCode(msg)">
                 <a-icon type="experiment" /> {{ isZh ? '校验并进入回测' : 'Validate and open backtest' }}
               </button>
-              <template v-if="!msg.isThinking && researchTargetForMessage(msg)">
+              <template v-if="!msg.isThinking && !msg.generationCancelled && researchTargetForMessage(msg)">
                 <button v-if="!isStrategyCodeMessage(msg)" type="button" :disabled="generatingStrategy || sending" @click="buildStrategyFromResearch(msg)"><a-icon type="code" /> {{ isZh ? '生成可回测策略' : 'Generate backtestable strategy' }}</button>
                 <button type="button" @click="monitorFromResearch(msg)"><a-icon type="radar-chart" /> {{ isZh ? '持续跟踪此结论' : 'Monitor this thesis' }}</button>
               </template>
@@ -218,7 +218,7 @@
               <button v-if="promptForMessage(msg)" type="button" @click="savePromptForMessage(msg)">
                 <a-icon type="book" /> {{ text.savePrompt }}
               </button>
-              <button v-for="action in visibleMessageActions(msg)" :key="action.key || action.label" type="button" @click="runMessageAction(action, msg)">
+              <button v-for="action in (msg.generationCancelled ? [] : visibleMessageActions(msg))" :key="action.key || action.label" type="button" @click="runMessageAction(action, msg)">
                 <a-icon :type="action.icon || 'arrow-right'" /> {{ messageActionLabel(action) }}
               </button>
               <button v-if="strategyCodeForMessage(msg)" type="button" @click="copyStrategyCode(msg)">
@@ -359,7 +359,7 @@
             <a-button @click="$refs.fileInput.click()">
               <a-icon type="picture" /> {{ uploadImageLabel }}
             </a-button>
-            <a-button v-if="sending && activeAssistantMessage && !generatingStrategy" icon="stop" @click="stopGeneration">{{ isZh ? '停止生成' : 'Stop generation' }}</a-button>
+            <a-button v-if="(sending || generatingStrategy) && activeAssistantMessage" icon="stop" @click="stopGeneration">{{ isZh ? '停止生成' : 'Stop generation' }}</a-button>
             <a-button type="primary" :disabled="!canSend" @click="sendMessage">
               <a-icon type="thunderbolt" /> {{ text.send }}
             </a-button>
@@ -723,8 +723,8 @@ import {
   exportChatReportPdf,
   createChatReportShare
 } from '@/api/market'
-import { aiGenerateStrategy } from '@/api/strategy'
 import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
+import { verifyStrategyCode } from '@/api/strategy'
 import AgentModelSelect from '@/components/AgentModelSelect.vue'
 import { reasoningLabel } from '@/utils/agentModelSelection.mjs'
 import { researchTaskForm, researchTaskConfig, validatedStrategyCode, nextSessionRadar } from '@/utils/researchWorkflow.mjs'
@@ -1206,7 +1206,7 @@ export default {
     },
     contextualFollowups () {
       const message = this.lastAssistantMessage || {}
-      if (this.sending || !message || message.isThinking) return []
+      if (this.sending || !message || message.isThinking || message.generationCancelled) return []
       const target = this.normalizeSymbolOption(this.context)
       const symbol = (target && target.symbol) || this.i18nText('aiAssetAnalysis.copilot.currentSymbol', 'the current symbol')
       return buildContextualFollowups({
@@ -1414,6 +1414,8 @@ export default {
       const controller = this.activeGenerationController
       const message = this.activeAssistantMessage
       if (message) {
+        if (this.$set) this.$set(message, 'generationCancelled', true)
+        else message.generationCancelled = true
         if (message.isThinking) message.content = this.isZh ? '已停止生成。' : 'Generation stopped.'
         message.isThinking = false
         message.progressPhase = ''
@@ -4021,6 +4023,10 @@ export default {
     },
     async generateStrategyV2Draft (prompt, target) {
       this.generatingStrategy = true
+      const controller = this.activeGenerationController || new AbortController()
+      const requestId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : ''
+      this.activeGenerationController = controller
+      this.activeGenerationRequestId = requestId
       const assistantMsg = {
         localId: 'local-' + (localId++),
         role: 'assistant',
@@ -4028,18 +4034,109 @@ export default {
         meta: 'strategy_build'
       }
       this.messages.push(assistantMsg)
+      this.activeAssistantMessage = assistantMsg
       this.scrollToBottom()
       try {
         // The backend supplies the versioned runtime contract. Do not leak
         // generic crypto/shorting examples into stock capability detection.
         const agentPrompt = `Target: ${this.strategyPromptTarget(target)}\n${prompt}`
-        const res = await aiGenerateStrategy({
+        if (!requestId) throw new Error('Browser UUID support is required for cancellable generation')
+        const token = this.getAccessToken()
+        const response = await fetch('/api/strategies/generate/stream', {
+          method: 'POST',
+          signal: controller.signal,
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+            [ACCESS_TOKEN]: token || '',
+            token: token || '',
+            'X-App-Lang': this.$i18n ? this.$i18n.locale : 'zh-CN'
+          },
+          body: JSON.stringify({
           llm_selection: { ...this.llmSelection },
+          request_id: requestId,
           prompt: agentPrompt,
           context: { market: target.market, symbol: target.symbol },
           intent: 'generate_code',
           source: 'copilot_quick_tool'
+          })
         })
+        if (!response.ok || !response.body) throw new Error(`Strategy stream API ${response.status}`)
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder('utf-8')
+        let buffer = ''
+        let partial = ''
+        let phase = 'generation'
+        let res = null
+        const renderDraft = () => {
+          assistantMsg.content = [
+            `## ${target.symbol} ${this.text.scriptStrategy}`,
+            '',
+            this.isZh ? '生成中 · 尚未通过策略校验，不可运行' : 'Generating · not yet validated or runnable',
+            '',
+            '```python',
+            partial,
+            '```'
+          ].join('\n')
+          this.scrollToBottom()
+        }
+        try {
+          while (!res) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const events = buffer.split(/\r?\n\r?\n/)
+            buffer = events.pop() || ''
+            for (const rawEvent of events) {
+              const lines = rawEvent.split(/\r?\n/)
+              const event = (lines.find(line => line.startsWith('event:')) || '').replace(/^event:\s*/, '').trim()
+              const data = lines.filter(line => line.startsWith('data:')).map(line => line.replace(/^data:\s*/, '')).join('\n')
+              if (!data) continue
+              const payload = JSON.parse(data)
+              if (event === 'progress') {
+                if (payload.phase && payload.phase !== phase && ['repair', 'full_fallback'].includes(payload.phase)) partial = ''
+                phase = payload.phase || phase
+                if (phase === 'validation') assistantMsg.content = this.isZh ? '策略源码已生成，正在校验…' : 'Source generated; validating…'
+              } else if (event === 'delta') {
+                if (payload.phase !== phase) partial = ''
+                phase = payload.phase || phase
+                partial += payload.text || ''
+                renderDraft()
+              } else if (event === 'done') {
+                res = { data: payload.data }
+                break
+              } else if (event === 'cancelled') {
+                const error = new Error('Generation cancelled')
+                error.name = 'AbortError'
+                throw error
+              } else if (event === 'error') {
+                throw new Error(payload.msg || 'Strategy generation failed')
+              }
+            }
+          }
+        } finally {
+          try { await reader.cancel() } catch (_) {}
+        }
+        if (!res) throw new Error('Strategy stream ended before validation')
+        assistantMsg.content = this.isZh ? '策略草稿已生成，正在检查策略契约…' : 'Draft generated; checking the strategy contract…'
+        const verification = await verifyStrategyCode({ code: res.data.code }, controller.signal)
+        if (controller.signal.aborted) {
+          const error = new Error('Generation cancelled')
+          error.name = 'AbortError'
+          throw error
+        }
+        const verified = verification && verification.data
+        if (!(verification && verification.code === 1 && verified && verified.valid)) {
+          throw new Error((verified && verified.error) || (verification && verification.msg) || 'Strategy contract verification failed')
+        }
+        res.data.manifest = verified.manifest
+        res.data.validation = {
+          ...(res.data.validation || {}),
+          success: true,
+          contract: 'compiled',
+          behavior: { executed: false, reason: 'backtest_required' }
+        }
         const code = validatedStrategyCode(res)
         const scriptDraftMeta = {
           symbol: target.symbol,
@@ -4052,6 +4149,7 @@ export default {
           `## ${target.symbol} ${this.text.scriptStrategy}`,
           '',
           this.i18nText('aiAssetAnalysis.copilot.scriptStrategyReady'),
+          this.isZh ? '源码已通过契约检查；仍需回测和人工确认，不会自动运行或下单。' : 'The source passed contract checks; backtest and review are still required. It will not run or place orders automatically.',
           '',
           '```python',
           code,
@@ -4078,6 +4176,12 @@ export default {
         }
         await this.persistCopilotMessage(assistantMsg, 'strategy_build')
       } catch (e) {
+        if (e && e.name === 'AbortError') {
+          if (this.$set) this.$set(assistantMsg, 'generationCancelled', true)
+          else assistantMsg.generationCancelled = true
+          assistantMsg.content = this.isZh ? '已停止生成；未保存或运行任何策略。' : 'Generation stopped; no strategy was saved or run.'
+          return
+        }
         console.warn('Script strategy generation failed', e)
         const detail = (e && e.response && e.response.data && e.response.data.data) || {}
         assistantMsg.content = (this.isZh ? '策略未通过生成/校验，尚未保存或运行。可重试生成，或调整规则后再试。' : 'Strategy generation/validation failed; nothing was saved or started. Retry or revise the rules.') + '\n\n' + String(detail.error || (e && e.message) || '')
@@ -4085,6 +4189,11 @@ export default {
       } finally {
         await this.loadBilling()
         this.generatingStrategy = false
+        if (this.activeGenerationController === controller) {
+          this.activeGenerationController = null
+          this.activeGenerationRequestId = ''
+          this.activeAssistantMessage = null
+        }
         this.scrollToBottom()
       }
     },
@@ -4244,6 +4353,7 @@ export default {
         role: 'assistant',
         content: this.thinkingText,
         isThinking: true,
+        progressPhase: 'routing',
         meta: '',
         created_at: new Date().toISOString()
       }
@@ -4308,6 +4418,8 @@ export default {
         } catch (streamError) {
           if (generationId !== this.generationSequence) return
           if (streamError && streamError.name === 'AbortError') {
+            if (this.$set) this.$set(assistantMsg, 'generationCancelled', true)
+            else assistantMsg.generationCancelled = true
             if (assistantMsg.isThinking) assistantMsg.content = this.isZh ? '已停止生成。' : 'Generation stopped.'
             assistantMsg.isThinking = false
             this.sending = false

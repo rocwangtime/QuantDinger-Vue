@@ -18,9 +18,10 @@ test('saved research task roundtrips pinned provider model and effort', () => {
 })
 test('every Copilot LLM request explicitly carries the chosen settings', () => {
   const source = readFileSync(new URL('../../src/views/ai-analysis/components/CopilotWorkbench.vue', import.meta.url), 'utf8')
-  for (const api of ['fastAnalyze', 'classifyAgentIntent', 'aiGenerateStrategy', 'chatMessage']) {
+  for (const api of ['fastAnalyze', 'classifyAgentIntent', 'chatMessage']) {
     assert.match(source, new RegExp(`${api}\\(\\{\\s+llm_selection: \\{ \\.\\.\\.this.llmSelection \\}`))
   }
+  assert.match(source, /fetch\('\/api\/strategies\/generate\/stream'[\s\S]*llm_selection: \{ \.\.\.this\.llmSelection \}/)
   assert.match(source, /session_id: this.sessionId,\s+llm_selection:/)
   assert.match(source, /prompt: agentPrompt,\s+llm_selection:/)
   assert.match(source, /modelSelectionReady && !this.sending/)
