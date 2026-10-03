@@ -4306,7 +4306,13 @@ export default {
           this.scrollToBottom()
           return
         } catch (streamError) {
-          if (generationId !== this.generationSequence || (streamError && streamError.name === 'AbortError')) return
+          if (generationId !== this.generationSequence) return
+          if (streamError && streamError.name === 'AbortError') {
+            if (assistantMsg.isThinking) assistantMsg.content = this.isZh ? '已停止生成。' : 'Generation stopped.'
+            assistantMsg.isThinking = false
+            this.sending = false
+            return
+          }
           if (streamError && (streamError.streamAccepted || streamError.streamHasContent)) {
             const hasContent = Boolean(String(assistantMsg.content || '').trim()) && !assistantMsg.isThinking
             assistantMsg.isThinking = false
