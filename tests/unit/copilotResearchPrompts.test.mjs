@@ -138,7 +138,7 @@ test('phase two connects saved prompts, event ranking, and response contracts', 
   assert.match(report, /recordCopilotEvent\('prompt_used'/)
   assert.match(report, /response_contract: this\.i18nText\(/)
   assert.match(report, /researchResponseContract\(this\.activeResearchMode, false\)/)
-  assert.match(report, /if \(this\.sending \|\| !message \|\| message\.isThinking\) return \[\]/)
+  assert.match(report, /if \(this\.sending \|\| !message \|\| message\.isThinking \|\| message\.generationCancelled\) return \[\]/)
   assert.match(report, /<details v-if="agentUsageItems\(msg\)\.length" class="agent-usage">/)
   assert.match(report, /button\.research-prompt-pill/)
   assert.match(report, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
