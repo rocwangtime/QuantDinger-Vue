@@ -147,7 +147,15 @@
         <a-alert type="info" show-icon :message="copy.createBoundary" />
       </a-form>
     </a-modal>
-    <a-drawer :visible="runsVisible" :title="selectedMonitor ? selectedMonitor.name : copy.runHistory" :width="520" @close="runsVisible = false">
+    <a-drawer
+      :visible="runsVisible"
+      width="min(720px, 100vw)"
+      :header-style="runsPanelStyle"
+      :body-style="runsPanelStyle"
+      :drawer-style="runsPanelStyle"
+      @close="runsVisible = false"
+    >
+      <span slot="title" :style="{ color: runsPanelStyle.color }">{{ selectedMonitor ? selectedMonitor.name : copy.runHistory }}</span>
       <a-spin :spinning="loadingRuns">
         <a-button v-if="selectedMonitor" size="small" icon="reload" @click="openMonitorRuns(selectedMonitor)">{{ copy.refresh }}</a-button>
         <a-alert type="info" show-icon :message="copy.runsBoundary" class="task-alert" />
@@ -159,7 +167,7 @@
           <div v-for="item in ((run.result && run.result.position_analyses) || [])" :key="`${item.market}:${item.symbol}`" class="task-run-symbol">
             <div><strong>{{ item.market }}:{{ item.symbol }}</strong><small>{{ item.error || item.final_decision || copy.noResult }}<template v-if="item.confidence != null && !item.error"> · {{ item.confidence }}%</template></small></div>
             <p v-if="item.reasoning">{{ item.reasoning }}</p>
-            <small v-if="item.risk_report">{{ item.risk_report }}</small>
+            <div v-if="item.risk_report" class="task-run-risks"><strong>{{ copy === wordsZh ? '风险与数据缺口' : 'Risks and data gaps' }}</strong><p>{{ item.risk_report }}</p></div>
             <a-popconfirm v-if="candidateFor(run, item)" :title="copy.candidateConfirm" :ok-text="copy.generateCandidate" :cancel-text="copy.cancel" @confirm="generateCandidate(run, item)">
               <a-button size="small" type="link" :loading="candidateLoadingKey === `${run.id}:${item.market}:${item.symbol}`">{{ copy.generateCandidate }} →</a-button>
             </a-popconfirm>
@@ -233,6 +241,11 @@ export default {
     wordsZh () { return words.zh },
     ...mapState({ navTheme: state => state.app.theme }),
     isDarkTheme () { return this.navTheme === 'dark' || this.navTheme === 'realdark' },
+    runsPanelStyle () {
+      return this.isDarkTheme
+        ? { background: '#141a1e', color: '#edf3f0', '--task-muted': '#b6c3be', '--task-border': '#2d3835' }
+        : { background: '#fff', color: '#17222a', '--task-muted': '#53636e', '--task-border': '#dce4e9' }
+    },
     copy () { return String(this.$i18n && this.$i18n.locale || '').toLowerCase().startsWith('zh') ? words.zh : words.en },
     researchMonitors () { return this.monitors.filter(item => item.monitor_type === 'ai') },
     activeMonitors () { return this.researchMonitors.filter(item => item.is_active) },
@@ -355,9 +368,10 @@ export default {
       this.runsVisible = true
       this.loadingRuns = true
       try {
-        const result = await getMonitorRuns(monitor.id)
+        const [result, summary] = await Promise.all([getMonitorRuns(monitor.id), getMonitors().catch(() => null)])
         if (!result || result.code !== 1) throw new Error((result && result.msg) || this.copy.actionError)
         if (this.selectedMonitor && this.selectedMonitor.id === monitor.id) this.monitorRuns = Array.isArray(result.data) ? result.data : []
+        if (summary && summary.code === 1 && Array.isArray(summary.data)) this.monitors = summary.data
       } catch (error) { this.$message.error((error && error.message) || this.copy.actionError) } finally { this.loadingRuns = false }
     },
     displayTime (value) { return value ? String(value).replace('T', ' ').slice(0, 19) : this.copy.never },
@@ -475,7 +489,10 @@ export default {
 .task-run { padding: 15px 0; border-bottom: 1px solid var(--task-border); }
 .task-run-heading { display: flex; justify-content: space-between; gap: 10px; }
 .task-run-heading span, .task-run p { color: var(--task-muted); }
-.task-run-symbol { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+.task-run-symbol { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; min-width: 0; }
+.task-run-symbol p { margin: 0; font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; white-space: pre-wrap; }
+.task-run-risks { padding: 12px; border: 1px solid var(--task-border); border-radius: 8px; }
+.task-run-risks strong { display: block; margin-bottom: 8px; }
 .task-run-symbol small { display: block; color: var(--task-muted); }
 .task-row-title { display: flex; align-items: center; gap: 9px; }
 .task-row-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
