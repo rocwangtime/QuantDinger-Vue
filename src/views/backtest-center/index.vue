@@ -292,6 +292,15 @@
           </div>
         </div>
 
+        <a-alert
+          v-else-if="runError && !activeResult"
+          data-testid="backtest-error"
+          type="error"
+          show-icon
+          :message="mode === 'factor' ? $t('strategyV2.factorResearch.runFailed') : $t('strategyV2.backtest.runFailed')"
+          :description="runError"
+        />
+
         <div v-else-if="!activeResult" class="result-empty" data-testid="backtest-empty">
           <div class="empty-hero-card">
             <div class="empty-orbit"><a-icon type="line-chart" /></div>
@@ -437,6 +446,7 @@ export default {
       factorResult: null,
       selectedRun: null,
       running: false,
+      runError: '',
       runElapsedSeconds: 0,
       runTimer: null,
       historyLoading: false,
@@ -894,9 +904,24 @@ export default {
     },
     async syncRouteSource ({ fallback = false, forceReload = false, preserveParams = false } = {}) {
       const routeSourceId = Number(this.$route.query.sourceId)
-      const routeSource = Number.isFinite(routeSourceId) && routeSourceId > 0
+      const hasExplicitSource = Number.isFinite(routeSourceId) && routeSourceId > 0
+      // This page is kept alive while the Agent/IDE creates a new source. A
+      // stale list must never silently substitute another strategy for it.
+      if (hasExplicitSource && !this.sources.some(item => Number(item.id) === routeSourceId)) {
+        await this.loadSources()
+      }
+      const routeSource = hasExplicitSource
         ? this.sources.find(item => Number(item.id) === routeSourceId)
         : null
+      if (hasExplicitSource && !routeSource) {
+        this.form.sourceId = null
+        this.source = null
+        this.manifest = null
+        this.result = null
+        this.factorResult = null
+        this.runError = this.$t('strategyV2.sourceNotFound')
+        return
+      }
       if (routeSource && this.mode === 'portfolio') {
         this.sourceCategory = routeSource.asset_type === 'portfolio_strategy' ? 'portfolio_strategy' : 'script'
       }
@@ -1125,6 +1150,7 @@ export default {
       }
       if (!this.ensureBacktestRangeAllowed()) return
       this.running = true
+      this.runError = ''
       this.result = null
       this.selectedRun = null
       this.startRunTimer()
@@ -1148,7 +1174,8 @@ export default {
         }
         await this.loadHistory({ mode: 'portfolio', force: true })
       } catch (error) {
-        this.$message.error((error && error.backendMessage) || this.$t('strategyV2.backtest.runFailed'))
+        this.runError = (error && error.backendMessage) || this.$t('strategyV2.backtest.runFailed')
+        this.$message.error(this.runError)
       } finally {
         this.stopRunTimer()
         this.running = false
@@ -1166,6 +1193,7 @@ export default {
       }
       if (!this.ensureBacktestRangeAllowed()) return
       this.running = true
+      this.runError = ''
       this.factorResult = null
       this.startRunTimer()
       try {
@@ -1184,7 +1212,8 @@ export default {
         this.selectedRun = { id: response.data && response.data.runId }
         await this.loadHistory({ mode: 'factor', force: true })
       } catch (error) {
-        this.$message.error((error && error.backendMessage) || this.$t('strategyV2.factorResearch.runFailed'))
+        this.runError = (error && error.backendMessage) || this.$t('strategyV2.factorResearch.runFailed')
+        this.$message.error(this.runError)
       } finally {
         this.stopRunTimer()
         this.running = false
