@@ -36,6 +36,36 @@
       </div>
     </section>
 
+    <section class="task-section opportunity-section">
+      <div class="section-heading">
+        <div><h2>{{ copy.opportunityTitle }}</h2><p>{{ copy.opportunityHint }}</p></div>
+        <a-radio-group v-model="opportunityFilter" size="small" @change="loadOpportunities">
+          <a-radio-button value="new">{{ copy.opportunityNew }}</a-radio-button>
+          <a-radio-button value="reviewed">{{ copy.opportunityReviewed }}</a-radio-button>
+          <a-radio-button value="dismissed">{{ copy.opportunityDismissed }}</a-radio-button>
+        </a-radio-group>
+      </div>
+      <a-alert type="info" show-icon :message="copy.opportunityBoundary" class="task-alert" />
+      <a-spin :spinning="loadingOpportunities">
+        <div v-if="!opportunities.length" class="task-empty">{{ copy.noOpportunities }}</div>
+        <div v-for="lead in opportunities" :key="lead.id" class="opportunity-row">
+          <div class="task-row-main">
+            <strong>{{ lead.market }}:{{ lead.symbol }}</strong>
+            <small>{{ copy.researchSource }} #{{ lead.run_id }} · {{ displayTime(lead.run_created_at) }}<template v-if="lead.analysis && lead.analysis.confidence != null"> · {{ lead.analysis.confidence }}%</template></small>
+            <p v-if="lead.analysis && lead.analysis.reasoning">{{ lead.analysis.reasoning }}</p>
+          </div>
+          <div class="task-row-actions">
+            <a-popconfirm v-if="candidateFor(opportunityRun(lead), lead.analysis)" :title="copy.candidateConfirm" :ok-text="copy.generateCandidate" :cancel-text="copy.cancel" @confirm="generateCandidate(opportunityRun(lead), lead.analysis, lead.monitor_id)">
+              <a-button size="small" type="primary" ghost :loading="candidateLoadingKey === `${lead.run_id}:${lead.market}:${lead.symbol}`">{{ copy.generateCandidate }}</a-button>
+            </a-popconfirm>
+            <a-button v-if="lead.status === 'new'" size="small" :loading="updatingOpportunityId === lead.id" @click="setOpportunityStatus(lead, 'reviewed')">{{ copy.markReviewed }}</a-button>
+            <a-button v-if="lead.status !== 'dismissed'" size="small" :loading="updatingOpportunityId === lead.id" @click="setOpportunityStatus(lead, 'dismissed')">{{ copy.dismissOpportunity }}</a-button>
+            <a-button v-if="lead.status !== 'new'" size="small" :loading="updatingOpportunityId === lead.id" @click="setOpportunityStatus(lead, 'new')">{{ copy.reopenOpportunity }}</a-button>
+          </div>
+        </div>
+      </a-spin>
+    </section>
+
     <div class="task-columns">
       <section class="task-section">
         <div class="section-heading">
@@ -134,7 +164,7 @@
 
 <script>
 import { mapState } from 'vuex'
-import { getMonitors, getMonitorRuns, addMonitor, updateMonitor } from '@/api/portfolio'
+import { getMonitors, getMonitorRuns, getResearchOpportunities, updateResearchOpportunity, addMonitor, updateMonitor } from '@/api/portfolio'
 import { getWatchlist } from '@/api/market'
 import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory, aiGenerateStrategy } from '@/api/strategy'
 import { researchCandidateFromRun, buildResearchStrategyPrompt } from './researchCandidate'
@@ -148,10 +178,35 @@ const words = {
   }
 }
 
+Object.assign(words.zh, {
+  opportunityTitle: '研究线索待审',
+  opportunityHint: '定时研究发现的美股/港股看多线索，先人工审阅，再决定是否开发策略。',
+  opportunityNew: '待审',
+  opportunityReviewed: '已阅',
+  opportunityDismissed: '已忽略',
+  opportunityBoundary: '研究线索是历史 AI 观点，不是实时信号、投资建议或交易授权。',
+  noOpportunities: '当前没有此状态的研究线索。',
+  markReviewed: '标记已阅',
+  dismissOpportunity: '忽略',
+  reopenOpportunity: '重新待审'
+})
+Object.assign(words.en, {
+  opportunityTitle: 'Research leads',
+  opportunityHint: 'US/HK bullish leads from scheduled research. Review before developing a strategy.',
+  opportunityNew: 'New',
+  opportunityReviewed: 'Reviewed',
+  opportunityDismissed: 'Dismissed',
+  opportunityBoundary: 'A research lead is a historical AI opinion, not a live signal, investment advice, or trading authorization.',
+  noOpportunities: 'No research leads in this state.',
+  markReviewed: 'Mark reviewed',
+  dismissOpportunity: 'Dismiss',
+  reopenOpportunity: 'Reopen'
+})
+
 export default {
   name: 'AgentTaskCenter',
   data () {
-    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '' }
+    return { loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
   },
   computed: {
     ...mapState({ navTheme: state => state.app.theme }),
@@ -169,7 +224,7 @@ export default {
       if (this.loading) return
       this.loading = true
       this.loadError = false
-      const results = await Promise.allSettled([getMonitors(), getWatchlist(), getStrategyList(), getScriptSourceList(), getStrategyBacktestHistory({ limit: 3 })])
+      const results = await Promise.allSettled([getMonitors(), getWatchlist(), getStrategyList(), getScriptSourceList(), getStrategyBacktestHistory({ limit: 3 }), getResearchOpportunities(this.opportunityFilter)])
       const value = index => {
         const result = results[index]
         if (result.status !== 'fulfilled' || !result.value || result.value.code !== 1) {
@@ -187,7 +242,31 @@ export default {
       this.strategies = value(2)
       this.scriptSources = value(3)
       this.backtests = value(4)
+      this.opportunities = value(5)
       this.loading = false
+    },
+    async loadOpportunities () {
+      const requestId = ++this.opportunityRequestId
+      this.loadingOpportunities = true
+      try {
+        const result = await getResearchOpportunities(this.opportunityFilter)
+        if (!result || result.code !== 1) throw new Error((result && result.msg) || this.copy.actionError)
+        if (requestId === this.opportunityRequestId) this.opportunities = Array.isArray(result.data) ? result.data : []
+      } catch (error) {
+        if (requestId === this.opportunityRequestId) this.$message.error((error && error.message) || this.copy.actionError)
+      } finally { if (requestId === this.opportunityRequestId) this.loadingOpportunities = false }
+    },
+    opportunityRun (lead) { return { id: lead.run_id, status: 'completed', created_at: lead.run_created_at, result: { success: true } } },
+    async setOpportunityStatus (lead, status) {
+      if (this.updatingOpportunityId) return
+      this.updatingOpportunityId = lead.id
+      try {
+        const result = await updateResearchOpportunity(lead.id, status)
+        if (!result || result.code !== 1) throw new Error((result && result.msg) || this.copy.actionError)
+        await this.loadOpportunities()
+      } catch (error) {
+        this.$message.error((error && error.message) || this.copy.actionError)
+      } finally { this.updatingOpportunityId = null }
     },
     monitorTarget (monitor) {
       const config = monitor.config || {}
@@ -214,7 +293,7 @@ export default {
       } catch (_) { return null }
     },
     candidateFor (run, item) { return researchCandidateFromRun(run, item) },
-    async generateCandidate (run, item) {
+    async generateCandidate (run, item, originMonitorId = 0) {
       const candidate = this.candidateFor(run, item)
       if (!candidate || this.candidateLoadingKey) return
       this.candidateLoadingKey = `${run.id}:${item.market}:${item.symbol}`
@@ -235,7 +314,7 @@ export default {
           market: candidate.market,
           symbol: candidate.symbol,
           research_origin: {
-            monitor_id: Number(this.selectedMonitor && this.selectedMonitor.id),
+            monitor_id: Number(originMonitorId || (this.selectedMonitor && this.selectedMonitor.id)),
             run_id: Number(run.id),
             observed_at: candidate.observedAt,
             decision: candidate.decision,
@@ -336,6 +415,9 @@ export default {
 .task-columns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); align-items: start; gap: 16px; }
 .task-empty { padding: 24px 8px; color: var(--task-muted); }
 .task-row, .strategy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--task-border); }
+.opportunity-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--task-border); }
+.opportunity-row small { display: block; margin-top: 4px; color: var(--task-muted); }
+.opportunity-row p { max-width: 850px; margin: 7px 0 0; color: var(--task-muted); line-height: 1.5; overflow-wrap: anywhere; }
 .task-row-main { min-width: 0; }
 .task-row-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .task-run { padding: 15px 0; border-bottom: 1px solid var(--task-border); }
@@ -358,6 +440,6 @@ export default {
 .permission-note { display: flex; gap: 8px; margin-top: 12px; padding: 12px; border-radius: 7px; background: var(--task-bg); color: var(--task-muted); line-height: 1.5; }
 .permission-note .anticon { flex: none; margin-top: 3px; color: var(--task-accent); }
 @media (max-width: 1050px) { .task-summary { grid-template-columns: repeat(3, 1fr); } .summary-safety { grid-column: 1 / -1; } .entry-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 760px) { .agent-task-center { padding: 18px 14px 34px; } .task-columns { grid-template-columns: 1fr; } .task-summary { grid-template-columns: repeat(2, 1fr); } .task-header { align-items: flex-start; } }
+@media (max-width: 760px) { .agent-task-center { padding: 18px 14px 34px; } .task-columns { grid-template-columns: 1fr; } .task-summary { grid-template-columns: repeat(2, 1fr); } .task-header { align-items: flex-start; } .opportunity-row { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 480px) { .entry-grid, .task-summary { grid-template-columns: 1fr; } .section-heading { flex-wrap: wrap; } .entry-grid button { min-height: 120px; } }
 </style>

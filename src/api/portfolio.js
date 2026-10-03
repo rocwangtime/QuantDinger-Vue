@@ -61,6 +61,22 @@ export function getMonitorRuns (id, limit = 20) {
   })
 }
 
+export function getResearchOpportunities (status = 'new', limit = 30) {
+  return request({
+    url: '/api/portfolio/opportunities',
+    method: 'get',
+    params: { status, limit }
+  })
+}
+
+export function updateResearchOpportunity (id, status) {
+  return request({
+    url: `/api/portfolio/opportunities/${id}`,
+    method: 'patch',
+    data: { status }
+  })
+}
+
 export function addMonitor (data) {
   return request({
     url: '/api/portfolio/monitors',
