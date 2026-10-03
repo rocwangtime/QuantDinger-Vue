@@ -4333,6 +4333,7 @@ export default {
         role: 'assistant',
         content: this.thinkingText,
         isThinking: true,
+        progressPhase: 'routing',
         meta: '',
         created_at: new Date().toISOString()
       }
