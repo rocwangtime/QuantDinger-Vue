@@ -50,6 +50,13 @@ test('a visible new-chat control distinguishes retained symbol from a blank chat
   assert.match(copilot, /this\.activeWorkspaceTab = 'ask'/)
 })
 
+test('opening an old chat restores its saved symbol before keeping it for a new chat', () => {
+  assert.match(copilot, /async loadHistory \(sessionId\) \{[\s\S]*?const session = \(this\.sessions \|\| \[\]\)\.find/)
+  assert.match(copilot, /session\.context_symbol && session\.context_market[\s\S]*?this\.normalizeSymbolOption/)
+  assert.match(copilot, /this\.context = target \? \{ market: target\.market, symbol: target\.symbol \}/)
+  assert.match(copilot, /this\.selectedSymbolValue = target \? this\.symbolOptionValue\(target\) : ''/)
+})
+
 test('language selector is click and keyboard accessible', () => {
   assert.match(selectLang, /trigger=\{\['click'\]\}/)
   assert.match(selectLang, /role="button" tabIndex="0" onKeydown=\{handleKeydown\}/)
