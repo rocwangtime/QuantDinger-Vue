@@ -9587,6 +9587,21 @@ body.realdark .copilot-workbench .research-mode-bar button,
   display: inline-flex;
 }
 
+.copilot-workbench .mobile-sessions-trigger {
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 28px;
+  margin: 0 0 7px;
+  padding: 4px 9px;
+  border: 1px solid var(--qd-border);
+  border-radius: 7px;
+  background: var(--qd-panel-soft);
+  color: var(--qd-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .copilot-workbench .mobile-rail-backdrop {
   position: fixed;
   inset: 0;
