@@ -97,6 +97,8 @@ test('research workspace keeps controls left, answer wide, and history behind an
   assert.match(copilot, /mobileSessionsOpen = true/)
   assert.match(copilot, /responseStartLocked/)
   assert.match(copilot, /research-progress__steps/)
+  assert.match(copilot, /monitorsOpen: false/)
+  assert.match(copilot, /max-height: ~"min\(48vh, 390px\)"/)
 })
 
 test('saved prompts use compact chat-history rows instead of stretched grid cards', () => {

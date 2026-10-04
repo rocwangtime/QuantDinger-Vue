@@ -437,11 +437,13 @@
 
       <section class="rail-panel monitor-panel">
         <div class="panel-head">
-          <span><a-icon type="clock-circle" /> {{ text.monitors }}</span>
+          <button type="button" class="monitor-panel__toggle" :aria-expanded="monitorsOpen" @click="monitorsOpen = !monitorsOpen">
+            <a-icon type="clock-circle" /> {{ text.monitors }} · {{ monitors.length }} <a-icon :type="monitorsOpen ? 'up' : 'down'" />
+          </button>
           <a-button size="small" type="link" :loading="loadingMonitors" @click="loadMonitors"><a-icon type="reload" /></a-button>
         </div>
-        <div v-if="monitors.length === 0" class="empty-mini">{{ text.noMonitors }}</div>
-        <div v-else class="monitor-list">
+        <div v-if="monitorsOpen && monitors.length === 0" class="empty-mini">{{ text.noMonitors }}</div>
+        <div v-if="monitorsOpen && monitors.length" class="monitor-list">
           <div v-for="m in monitors.slice(0, 8)" :key="m.id" class="monitor-card">
             <div>
               <strong>{{ monitorSymbol(m) }}</strong>
@@ -795,6 +797,7 @@ export default {
       sessions: [],
       sessionId: null,
       mobileSessionsOpen: false,
+      monitorsOpen: false,
       progressElapsedSeconds: 0,
       progressTimer: null,
       responseStartLocked: false,
@@ -9468,16 +9471,30 @@ body.realdark .copilot-workbench .research-mode-bar button,
 }
 
 .copilot-workbench .right-rail .watch-panel {
-  flex: none;
+  flex: 1;
   min-height: 0;
-  max-height: 65%;
+  max-height: none;
   overflow-y: auto;
 }
 
 .copilot-workbench .right-rail .monitor-panel {
-  flex: 1;
-  min-height: 110px;
+  flex: none;
+  min-height: 0;
+  max-height: 180px;
   overflow-y: auto;
+}
+
+.copilot-workbench .monitor-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--qd-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .copilot-workbench .chat-hero {
@@ -9504,11 +9521,19 @@ body.realdark .copilot-workbench .research-mode-bar button,
   grid-column: 1;
   grid-row: 3;
   min-height: 0;
-  max-height: ~"min(65vh, 650px)";
+  max-height: ~"min(48vh, 390px)";
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--qd-border-soft);
   border-radius: 12px;
+}
+
+.copilot-workbench .composer-foot {
+  position: sticky;
+  z-index: 3;
+  bottom: -12px;
+  padding-top: 6px;
+  background: var(--qd-panel);
 }
 
 .copilot-workbench .composer-context-bar {
