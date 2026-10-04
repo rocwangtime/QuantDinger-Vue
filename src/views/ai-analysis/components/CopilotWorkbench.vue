@@ -1815,6 +1815,16 @@ export default {
       this.sessionId = sessionId
       this.activeWorkspaceTab = 'ask'
       this.mobileSessionsOpen = false
+      const session = (this.sessions || []).find(item => String(item.id) === String(sessionId))
+      if (session) {
+        const target = session.context_symbol && session.context_market
+          ? this.normalizeSymbolOption({ market: session.context_market, symbol: session.context_symbol })
+          : null
+        this.context = target ? { market: target.market, symbol: target.symbol } : { market: '', symbol: '' }
+        this.selectedSymbolValue = target ? this.symbolOptionValue(target) : ''
+        this.skipDefaultWatchSymbol = true
+        this.seedSymbolOptions()
+      }
       try {
         const res = await getChatHistory({ session_id: sessionId })
         const rawMessages = Array.isArray(res.data) ? res.data : ((res.data && res.data.messages) || [])
