@@ -5,8 +5,9 @@ export function researchTaskForm (config = {}) {
 export function researchTaskConfig (form) {
   const kind = form.trigger_type || 'scheduled'
   const price = Number(form.trigger_price)
-  if (kind !== 'scheduled' && (!Number.isFinite(price) || price <= 0)) throw new Error('请填写大于 0 的触发价格 / Enter a positive trigger price')
-  return { ...(form.llm_selection ? { llm_selection: { ...form.llm_selection } } : {}), prompt: String(form.prompt || '').trim().slice(0, 12000), session_window: form.session_window || 'always', trigger: kind === 'scheduled' ? { type: kind } : { type: kind, price } }
+  if (['price_above', 'price_below'].includes(kind) && (!Number.isFinite(price) || price <= 0)) throw new Error('请填写大于 0 的触发价格 / Enter a positive trigger price')
+  if (!['scheduled', 'price_above', 'price_below', 'news_event'].includes(kind)) throw new Error('Invalid research trigger')
+  return { ...(form.llm_selection ? { llm_selection: { ...form.llm_selection } } : {}), prompt: String(form.prompt || '').trim().slice(0, 12000), session_window: form.session_window || 'always', trigger: ['scheduled', 'news_event'].includes(kind) ? { type: kind } : { type: kind, price } }
 }
 
 export function validatedStrategyCode (response) {

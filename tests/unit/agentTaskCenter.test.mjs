@@ -34,7 +34,7 @@ test('AI monitoring has a distinct entry and does not advertise automatic orders
   assert.match(router, /path: '\/ai-monitor'/)
   assert.match(router, /workspaceMode: 'monitor'/)
   assert.match(layout, /paths: \['\/ai-monitor'\]/)
-  assert.match(page, /新闻热点触发也尚未接入/)
+  assert.match(page, /新闻触发目前只会启动研究/)
   assert.match(page, /未联动；不会自动下单/)
 })
 

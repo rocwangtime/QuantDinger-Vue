@@ -18,10 +18,11 @@
         <a-select-option value="scheduled">{{ isZh ? '按间隔分析' : 'Every scheduled interval' }}</a-select-option>
         <a-select-option value="price_above">{{ isZh ? '价格大于等于阈值' : 'Price at or above threshold' }}</a-select-option>
         <a-select-option value="price_below">{{ isZh ? '价格小于等于阈值' : 'Price at or below threshold' }}</a-select-option>
+        <a-select-option v-if="isStock" value="news_event">{{ isZh ? '出现新的相关新闻事件' : 'New relevant news event' }}</a-select-option>
       </a-select>
-      <a-input-number v-if="value.trigger_type && value.trigger_type !== 'scheduled'" :value="value.trigger_price" :min="0.000001" :placeholder="isZh ? '触发价格' : 'Trigger price'" @change="set('trigger_price', $event)" />
+      <a-input-number v-if="['price_above', 'price_below'].includes(value.trigger_type)" :value="value.trigger_price" :min="0.000001" :placeholder="isZh ? '触发价格' : 'Trigger price'" @change="set('trigger_price', $event)" />
     </a-form-item>
-    <p class="research-task-note">{{ isZh ? '按所选间隔检查；时段或价格条件不满足时跳过 AI。价格条件使用 5 分钟内的已收盘 1 分钟 K 线，条件持续满足时每个间隔可再次分析。这里不会自动下单。' : 'Checked at the selected interval; unmet conditions skip AI. Price gates require a closed 1-minute bar no older than 5 minutes. A sustained condition can trigger each interval. No orders are placed here.' }}</p>
+    <p class="research-task-note">{{ isZh ? '按所选间隔检查；条件不满足时不调用 Agent。价格条件要求 5 分钟内的已收盘 1 分钟 K 线；新闻条件仅接受 24 小时内、带时间和链接且匹配标的的新事件。检索来源和新闻内容可能不可靠，结果仅供研究，不会自动下单。' : 'Checked at the selected interval; unmet conditions skip the agent. Price gates require a recent closed 1-minute bar. News gates require a new matching link with a timestamp within 24 hours. Search/news can be unreliable; research only, no orders.' }}</p>
   </div>
 </template>
 <script>

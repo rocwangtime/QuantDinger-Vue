@@ -7,6 +7,7 @@ test('research brief and price/window settings survive edit round trips', () => 
   assert.deepEqual(researchTaskConfig(researchTaskForm(config)), config)
   assert.equal(researchTaskForm({ focus_conditions: 'legacy condition' }).prompt, 'legacy condition')
   assert.throws(() => researchTaskConfig({ trigger_type: 'price_above', trigger_price: NaN }))
+  assert.deepEqual(researchTaskConfig(researchTaskForm({ trigger: { type: 'news_event' } })).trigger, { type: 'news_event' })
 })
 
 test('only validated generator artifacts can enter the strategy flow', () => {
