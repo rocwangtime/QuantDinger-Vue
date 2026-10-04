@@ -31,6 +31,7 @@ function workspace (classify = async () => ({ data: { intent: 'market_analysis',
     canSend: true, draft: 'Analyze SPCX trend, momentum and liquidity.', attachments: [], messages: [], context: {},
     thinkingText: 'thinking', text: { chatUnavailable: 'unavailable' }, $i18n: { locale: 'en-US' },
     recordCopilotEvent () {}, $nextTick () {}, scrollToBottom () {},
+    scrollToResponseStart () {}, startProgressClock () {}, stopProgressClock () {}, finishProgress () {},
     async handlePendingStrategyAgentMessage () { return false },
     async loadAgentPreflight () { calls.preflight++; this.agentPreflight = { blockers: [] } },
     async resolveMessageSymbol () { calls.resolve++; return { market: 'USStock', symbol: 'SPCX' } },
@@ -161,6 +162,7 @@ test('stop generation marks partial text and cancels the authenticated stream', 
     activeGenerationRequestId: '6d6271b2-cbb7-44ec-9d1a-8093940ec006',
     activeGenerationController: { abort () { aborted = true } },
     activeAssistantMessage: { role: 'assistant', content: 'partial answer', isThinking: false },
+    finishProgress () {},
     getAccessToken: () => 'test-token', isZh: true
   }
   await vm.stopGeneration()
@@ -170,4 +172,22 @@ test('stop generation marks partial text and cancels the authenticated stream', 
   assert.match(vm.activeAssistantMessage.streamWarning, /未完成/)
   assert.equal(posted[0].url, '/api/ai/chat/message/cancel')
   assert.equal(JSON.parse(posted[0].options.body).request_id, vm.activeGenerationRequestId)
+})
+
+test('research tool steps remain visible during streaming and collapse after completion', () => {
+  const vm = {
+    ...loadMethods(['handleStreamEvent', 'updateProgressStep', 'finishProgress', 'clearThinkingMessage']),
+    isZh: true, sessionId: 1, stopProgressClock () {},
+    setAgentUsageActions () {}, appendMemoryActions () {}, appendAgentNextActions () {}, loadSessionMemory () {}
+  }
+  const reply = { role: 'assistant', content: '思考中', isThinking: true, progressSteps: [], progressExpanded: true }
+  vm.handleStreamEvent('event: tool_progress\ndata: {"tool":"web_research.search","label":"网页与新闻检索","status":"planned"}', reply)
+  assert.equal(reply.progressSteps[0].status, 'running')
+  vm.handleStreamEvent('event: tool_progress\ndata: {"tool":"web_research.search","label":"网页与新闻检索","status":"success","detail":"3 条可用结果"}', reply)
+  vm.handleStreamEvent('event: delta\ndata: {"text":"答案开头"}', reply)
+  assert.equal(reply.progressExpanded, true)
+  assert.equal(reply.content, '答案开头')
+  vm.handleStreamEvent('event: done\ndata: {}', reply)
+  assert.equal(reply.progressExpanded, false)
+  assert.equal(reply.progressSteps[0].detail, '3 条可用结果')
 })

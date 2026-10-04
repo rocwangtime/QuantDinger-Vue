@@ -87,11 +87,14 @@ test('trading script editor actions are localized for every supported language',
   assert.doesNotMatch(copilot, /i18nText\('aiAssetAnalysis\.copilot\.openStrategyV2Ide',\s*'Open Trading Script editor'/)
 })
 
-test('desktop breakpoint keeps history, chat, and watchlist in one row', () => {
-  assert.match(
-    copilot,
-    /@media \(max-width: 1360px\)[\s\S]*?grid-template-columns: minmax\(210px, 240px\) minmax\(460px, 1fr\) minmax\(230px, 260px\)/
-  )
+test('research workspace keeps controls left, answer wide, and history behind an entry', () => {
+  assert.match(copilot, /grid-template-columns: clamp\(320px, 28vw, 390px\) minmax\(0, 1fr\) !important/)
+  assert.match(copilot, /\.copilot-workbench > \.right-rail \{[\s\S]*?grid-column: 1/)
+  assert.match(copilot, /\.copilot-workbench \.messages \{[\s\S]*?grid-column: 2/)
+  assert.match(copilot, /\.copilot-workbench \.composer \{[\s\S]*?grid-column: 1/)
+  assert.match(copilot, /mobileSessionsOpen = true/)
+  assert.match(copilot, /responseStartLocked/)
+  assert.match(copilot, /research-progress__steps/)
 })
 
 test('saved prompts use compact chat-history rows instead of stretched grid cards', () => {
