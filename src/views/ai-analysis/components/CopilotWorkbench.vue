@@ -62,6 +62,18 @@
 
     </aside>
 
+    <nav class="workspace-tabs" role="tablist" :aria-label="isZh ? '研究工作区' : 'Research workspace'">
+      <button type="button" role="tab" :aria-selected="activeWorkspaceTab === 'ask'" :class="{ active: activeWorkspaceTab === 'ask' }" @click="activeWorkspaceTab = 'ask'">
+        <a-icon type="message" /><span>{{ isZh ? '提问分析' : 'Ask AI' }}</span>
+      </button>
+      <button type="button" role="tab" :aria-selected="activeWorkspaceTab === 'watch'" :class="{ active: activeWorkspaceTab === 'watch' }" @click="activeWorkspaceTab = 'watch'">
+        <a-icon type="star" /><span>{{ text.watchlist }}</span><small>{{ watchlist.length }}</small>
+      </button>
+      <button type="button" role="tab" :aria-selected="activeWorkspaceTab === 'monitor'" :class="{ active: activeWorkspaceTab === 'monitor' }" @click="activeWorkspaceTab = 'monitor'">
+        <a-icon type="clock-circle" /><span>{{ text.monitors }}</span><small>{{ monitors.length }}</small>
+      </button>
+    </nav>
+
     <main class="chat-panel">
       <header class="chat-hero">
         <button type="button" class="mobile-sessions-trigger" @click="mobileSessionsOpen = true">
@@ -263,7 +275,7 @@
         </button>
       </div>
 
-      <footer class="composer">
+      <footer v-show="activeWorkspaceTab === 'ask'" class="composer">
         <div v-if="attachments.length" class="pending-attachments">
           <div v-for="(att, idx) in attachments" :key="att.name + idx" class="pending-thumb">
             <img :src="att.data_url" :alt="att.name">
@@ -318,6 +330,32 @@
           <span>{{ text.followingReport }}</span>
           <button type="button" @click="draftReferencedReportId = null"><a-icon type="close" /></button>
         </div>
+        <div class="question-editor">
+          <textarea
+            ref="composerInput"
+            v-model="draft"
+            :placeholder="text.placeholder"
+            :style="{ height: composerHeight + 'px' }"
+            @input="resizeComposer"
+            @keydown.enter.exact.prevent="sendMessage"
+            @keydown.ctrl.enter.prevent="sendMessage"
+            @keydown.meta.enter.prevent="sendMessage"
+            @paste="handlePaste"
+          />
+          <div class="composer-foot">
+            <AgentModelSelect v-model="llmSelection" compact remember :disabled="sending || generatingStrategy || analyzingSymbol" @ready="modelSelectionReady = $event" />
+            <div class="composer-actions">
+              <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple @change="handleFiles">
+              <a-button @click="$refs.fileInput.click()">
+                <a-icon type="picture" /> {{ uploadImageLabel }}
+              </a-button>
+              <a-button v-if="(sending || generatingStrategy) && activeAssistantMessage" icon="stop" @click="stopGeneration">{{ isZh ? '停止生成' : 'Stop generation' }}</a-button>
+              <a-button type="primary" :disabled="!canSend" @click="sendMessage">
+                <a-icon type="thunderbolt" /> {{ text.send }}
+              </a-button>
+            </div>
+          </div>
+        </div>
         <div class="research-mode-bar" role="tablist" :aria-label="text.researchMode">
           <button
             v-for="mode in researchModeOptions"
@@ -353,39 +391,12 @@
             </div>
           </div>
         </div>
-        <AgentModelSelect v-model="llmSelection" remember :disabled="sending || generatingStrategy || analyzingSymbol" @ready="modelSelectionReady = $event" />
-        <textarea
-          ref="composerInput"
-          v-model="draft"
-          :placeholder="text.placeholder"
-          :style="{ height: composerHeight + 'px' }"
-          @input="resizeComposer"
-          @keydown.enter.exact.prevent="sendMessage"
-          @keydown.ctrl.enter.prevent="sendMessage"
-          @keydown.meta.enter.prevent="sendMessage"
-          @paste="handlePaste"
-        />
-        <div class="composer-foot">
-          <p class="risk-disclaimer">
-            <a-icon type="safety-certificate" />
-            <span>{{ text.riskDisclaimer }}</span>
-          </p>
-          <div class="composer-actions">
-            <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple @change="handleFiles">
-            <a-button @click="$refs.fileInput.click()">
-              <a-icon type="picture" /> {{ uploadImageLabel }}
-            </a-button>
-            <a-button v-if="(sending || generatingStrategy) && activeAssistantMessage" icon="stop" @click="stopGeneration">{{ isZh ? '停止生成' : 'Stop generation' }}</a-button>
-            <a-button type="primary" :disabled="!canSend" @click="sendMessage">
-              <a-icon type="thunderbolt" /> {{ text.send }}
-            </a-button>
-          </div>
-        </div>
+        <p class="risk-disclaimer"><a-icon type="safety-certificate" /> <span>{{ text.riskDisclaimer }}</span></p>
       </footer>
     </main>
 
-    <aside class="right-rail" :aria-label="isZh ? '研究设置' : 'Research controls'">
-      <section class="rail-panel watch-panel">
+    <aside v-if="activeWorkspaceTab !== 'ask'" class="right-rail" :aria-label="isZh ? '研究设置' : 'Research controls'">
+      <section v-if="activeWorkspaceTab === 'watch'" class="rail-panel watch-panel">
         <div class="panel-head">
           <span><a-icon type="star" theme="filled" /> {{ text.watchlist }}</span>
           <a-button size="small" type="link" @click="loadWatchlist"><a-icon type="reload" /></a-button>
@@ -396,7 +407,7 @@
         <div v-if="watchlist.length === 0" class="empty-mini">{{ text.noWatchlist }}</div>
         <div v-else class="watch-list">
           <div
-            v-for="item in watchlist.slice(0, 12)"
+            v-for="item in watchlist"
             :key="watchKey(item)"
             class="watch-card"
             :class="{ active: watchKey(item) === selectedSymbolValue }"
@@ -435,16 +446,18 @@
         </div>
       </section>
 
-      <section class="rail-panel monitor-panel">
+      <section v-if="activeWorkspaceTab === 'monitor'" class="rail-panel monitor-panel">
         <div class="panel-head">
-          <button type="button" class="monitor-panel__toggle" :aria-expanded="monitorsOpen" @click="monitorsOpen = !monitorsOpen">
-            <a-icon type="clock-circle" /> {{ text.monitors }} · {{ monitors.length }} <a-icon :type="monitorsOpen ? 'up' : 'down'" />
-          </button>
+          <span><a-icon type="clock-circle" /> {{ text.monitors }} · {{ monitors.length }}</span>
           <a-button size="small" type="link" :loading="loadingMonitors" @click="loadMonitors"><a-icon type="reload" /></a-button>
         </div>
-        <div v-if="monitorsOpen && monitors.length === 0" class="empty-mini">{{ text.noMonitors }}</div>
-        <div v-if="monitorsOpen && monitors.length" class="monitor-list">
-          <div v-for="m in monitors.slice(0, 8)" :key="m.id" class="monitor-card">
+        <div class="add-watch">
+          <a-button type="primary" block icon="plus" :disabled="!context.symbol" @click="openTaskModal()">{{ text.createMonitor }}</a-button>
+          <small v-if="!context.symbol" class="monitor-target-hint">{{ isZh ? '先在“观察名单”选择标的' : 'Choose a symbol from the watchlist first' }}</small>
+        </div>
+        <div v-if="monitors.length === 0" class="empty-mini">{{ text.noMonitors }}</div>
+        <div v-else class="monitor-list">
+          <div v-for="m in monitors" :key="m.id" class="monitor-card">
             <div>
               <strong>{{ monitorSymbol(m) }}</strong>
               <span>{{ intervalText(m) }} | {{ notificationText(m) }} | {{ m.is_active ? text.running : text.paused }}</span>
@@ -797,7 +810,7 @@ export default {
       sessions: [],
       sessionId: null,
       mobileSessionsOpen: false,
-      monitorsOpen: false,
+      activeWorkspaceTab: 'ask',
       progressElapsedSeconds: 0,
       progressTimer: null,
       responseStartLocked: false,
@@ -2101,6 +2114,7 @@ export default {
       this.eventModalVisible = true
     },
     askAboutEvent (event, sendNow = false) {
+      this.activeWorkspaceTab = 'ask'
       const title = this.eventTitle(event)
       const symbol = this.context.symbol || this.i18nText('aiAssetAnalysis.copilot.eventPreview.symbolFallback', 'the selected symbol')
       this.draft = this.i18nText(
@@ -2119,6 +2133,7 @@ export default {
       return this.i18nText('aiAssetAnalysis.copilot.eventPreview.medium', 'This event may create moderate volatility. Compare actual, forecast, and prevailing trend before forming a directional view.', { symbol })
     },
     usePrompt (prompt, options = {}) {
+      this.activeWorkspaceTab = 'ask'
       this.draft = prompt
       const lockTarget = options && options.contextLock ? this.normalizeSymbolOption(options.contextLock) : null
       this.draftContextLock = lockTarget ? { ...lockTarget, locked: true } : null
@@ -3702,6 +3717,7 @@ export default {
     },
     appendStrategySuggestion (suggestion) {
       if (!suggestion || !suggestion.prompt) return
+      this.activeWorkspaceTab = 'ask'
       const current = String(this.draft || '').trim()
       if (current.includes(suggestion.prompt)) return
       this.draft = [current, suggestion.prompt].filter(Boolean).join('\n')
@@ -9667,5 +9683,143 @@ body.realdark .copilot-workbench .research-mode-bar button,
   .copilot-workbench .messages { grid-column: 1; grid-row: 3; min-height: 320px; }
   .copilot-workbench .composer { grid-column: 1; grid-row: 4; max-height: none; }
   .copilot-workbench .followup-suggestions { grid-column: 1; grid-row: 3; }
+}
+
+/* Dedicated workspace navigation keeps watchlists and scheduled research readable. */
+.copilot-workbench {
+  grid-template-columns: 78px clamp(320px, 27vw, 390px) minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.copilot-workbench > .workspace-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  grid-column: 1;
+  grid-row: ~"1 / 3";
+  padding: 8px 5px;
+  border: 1px solid var(--qd-border-soft);
+  border-radius: 12px;
+  background: var(--qd-panel);
+}
+
+.workspace-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 72px;
+  padding: 7px 2px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--qd-text-muted);
+  font-size: 11px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.workspace-tabs button .anticon { font-size: 17px; }
+.workspace-tabs button small { color: var(--qd-text-subtle); font-size: 10px; }
+.workspace-tabs button:hover,
+.workspace-tabs button.active {
+  border-color: var(--qd-accent-border);
+  background: var(--qd-accent-soft);
+  color: var(--qd-accent);
+}
+
+.copilot-workbench .chat-hero { grid-column: 3; grid-row: 1; }
+.copilot-workbench .messages { grid-column: 3; grid-row: 2; }
+.copilot-workbench .followup-suggestions { grid-column: 3; grid-row: 2; }
+.copilot-workbench .composer,
+.copilot-workbench > .right-rail {
+  grid-column: 2;
+  grid-row: ~"1 / 3";
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+}
+
+.copilot-workbench > .right-rail {
+  display: flex !important;
+  overflow: hidden;
+}
+
+.copilot-workbench .right-rail .watch-panel,
+.copilot-workbench .right-rail .monitor-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+
+.copilot-workbench .right-rail .watch-list,
+.copilot-workbench .right-rail .monitor-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  align-content: start;
+  overflow-y: auto;
+}
+.copilot-workbench .monitor-target-hint { display: block; margin-top: 6px; color: var(--qd-text-muted); font-size: 11px; }
+
+.copilot-workbench .composer { padding: 14px; }
+.copilot-workbench .question-editor {
+  margin-top: 12px;
+  border: 1px solid var(--qd-border);
+  border-radius: 10px;
+  background: var(--qd-panel-soft);
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.copilot-workbench .question-editor:focus-within {
+  border-color: var(--qd-accent-border);
+  box-shadow: 0 0 0 3px var(--qd-accent-ring);
+}
+.copilot-workbench .question-editor textarea,
+.copilot-workbench .question-editor textarea:focus {
+  display: block;
+  min-height: 145px;
+  max-height: 260px;
+  border: 0;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+.copilot-workbench .composer-foot {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--qd-border-soft);
+  background: transparent;
+}
+.copilot-workbench .composer-foot .composer-actions { justify-content: flex-end; }
+.copilot-workbench .composer > .risk-disclaimer { margin-top: 10px; }
+
+@media (max-width: 960px) {
+  .copilot-workbench {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto auto auto minmax(320px, 1fr);
+    overflow-y: auto;
+  }
+  .copilot-workbench > .workspace-tabs {
+    flex-direction: row;
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .workspace-tabs button { flex: 1 1 0; min-height: 50px; flex-direction: row; }
+  .copilot-workbench .composer,
+  .copilot-workbench > .right-rail { grid-column: 1; grid-row: 2; height: auto; max-height: none; }
+  .copilot-workbench .chat-hero { grid-column: 1; grid-row: 3; }
+  .copilot-workbench .messages { grid-column: 1; grid-row: 4; min-height: 320px; }
+  .copilot-workbench .followup-suggestions { grid-column: 1; grid-row: 4; }
 }
 </style>
