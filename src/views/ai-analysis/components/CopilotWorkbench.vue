@@ -122,13 +122,27 @@
           <div class="avatar">
             <a-icon :type="msg.role === 'assistant' ? 'thunderbolt' : 'smile'" />
           </div>
-          <div class="bubble">
+          <div class="bubble" :data-message-local-id="msg.localId || msg.id">
             <div v-if="msg.attachments && msg.attachments.length" class="attachment-row">
               <div v-for="att in msg.attachments" :key="att.name" class="thumb">
                 <img v-if="att.data_url || att.preview" :src="att.data_url || att.preview" :alt="att.name">
                 <span v-else class="thumb-missing">{{ att.name || text.imageAttachment }}</span>
               </div>
             </div>
+            <section v-if="msg.role === 'assistant' && msg.progressSteps && msg.progressSteps.length" class="research-progress" :aria-label="isZh ? '研究过程' : 'Research progress'">
+              <button type="button" class="research-progress__toggle" :aria-expanded="msg.progressExpanded !== false" @click="msg.progressExpanded = !msg.progressExpanded">
+                <a-icon :type="sending && activeAssistantMessage === msg ? 'loading' : 'check-circle'" />
+                <span>{{ isZh ? '研究过程与数据工具' : 'Research steps and data tools' }}</span>
+                <small v-if="sending && activeAssistantMessage === msg">{{ generationPhaseLabel(msg.progressPhase) }} · {{ progressElapsedSeconds }}s</small>
+                <a-icon :type="msg.progressExpanded === false ? 'down' : 'up'" />
+              </button>
+              <div v-if="msg.progressExpanded !== false" class="research-progress__steps">
+                <div v-for="step in msg.progressSteps" :key="step.key" class="research-progress__step" :class="'is-' + step.status">
+                  <a-icon :type="step.status === 'running' ? 'loading' : step.status === 'success' ? 'check-circle' : step.status === 'planned' ? 'clock-circle' : 'info-circle'" />
+                  <div><strong>{{ step.label }}</strong><span>{{ step.detail }}</span></div>
+                </div>
+              </div>
+            </section>
             <div class="message-content" v-html="renderMarkdown(msg.content)" @click="handleMessageContentClick" />
             <div
               v-if="msg.report || msg.reportLoading || msg.reportError"
@@ -173,7 +187,7 @@
               <a-icon type="warning" />
               <span>{{ msg.streamWarning }}</span>
             </div>
-            <div v-if="msg.isThinking && msg.progressPhase" class="message-meta">{{ generationPhaseLabel(msg.progressPhase) }}</div>
+            <div v-if="msg.isThinking && msg.progressPhase && !msg.progressSteps" class="message-meta">{{ generationPhaseLabel(msg.progressPhase) }}</div>
             <div v-if="msg.meta" class="message-meta">{{ msg.meta }}</div>
             <details v-if="agentUsageItems(msg).length" class="agent-usage">
               <summary>
@@ -249,14 +263,13 @@
         </button>
       </div>
 
-      <div v-if="attachments.length" class="pending-attachments">
-        <div v-for="(att, idx) in attachments" :key="att.name + idx" class="pending-thumb">
-          <img :src="att.data_url" :alt="att.name">
-          <button type="button" @click="removeAttachment(idx)"><a-icon type="close" /></button>
-        </div>
-      </div>
-
       <footer class="composer">
+        <div v-if="attachments.length" class="pending-attachments">
+          <div v-for="(att, idx) in attachments" :key="att.name + idx" class="pending-thumb">
+            <img :src="att.data_url" :alt="att.name">
+            <button type="button" @click="removeAttachment(idx)"><a-icon type="close" /></button>
+          </div>
+        </div>
         <div class="context-bar composer-context-bar">
           <div class="context-status">
             <a-icon type="search" />
@@ -371,7 +384,7 @@
       </footer>
     </main>
 
-    <aside class="right-rail">
+    <aside class="right-rail" :aria-label="isZh ? '研究设置' : 'Research controls'">
       <section class="rail-panel watch-panel">
         <div class="panel-head">
           <span><a-icon type="star" theme="filled" /> {{ text.watchlist }}</span>
@@ -782,6 +795,9 @@ export default {
       sessions: [],
       sessionId: null,
       mobileSessionsOpen: false,
+      progressElapsedSeconds: 0,
+      progressTimer: null,
+      responseStartLocked: false,
       sending: false,
       activeGenerationController: null,
       activeGenerationRequestId: '',
@@ -1397,6 +1413,7 @@ export default {
   },
   beforeDestroy () {
     if (this.activeGenerationController) this.activeGenerationController.abort()
+    if (this.progressTimer) clearInterval(this.progressTimer)
     if (this.symbolSearchTimer) clearTimeout(this.symbolSearchTimer)
     if (this.addWatchSearchTimer) clearTimeout(this.addWatchSearchTimer)
     if (this._markdownChartFrame) cancelAnimationFrame(this._markdownChartFrame)
@@ -1411,6 +1428,40 @@ export default {
       const en = { routing: 'Routing the request…', context: 'Collecting market and research data…', generation: 'Generating the answer…' }
       return (this.isZh ? zh : en)[phase] || this.thinkingText
     },
+    startProgressClock () {
+      if (this.progressTimer) clearInterval(this.progressTimer)
+      const started = Date.now()
+      this.progressElapsedSeconds = 0
+      this.progressTimer = setInterval(() => { this.progressElapsedSeconds = Math.floor((Date.now() - started) / 1000) }, 1000)
+    },
+    stopProgressClock () {
+      if (this.progressTimer) clearInterval(this.progressTimer)
+      this.progressTimer = null
+    },
+    updateProgressStep (message, key, label, status, detail) {
+      if (!message) return
+      if (!Array.isArray(message.progressSteps)) this.$set(message, 'progressSteps', [])
+      const existing = message.progressSteps.find(item => item.key === key)
+      const next = { key, label, status, detail }
+      if (existing) Object.assign(existing, next)
+      else message.progressSteps.push(next)
+    },
+    finishProgress (message) {
+      if (!message) return
+      for (const step of message.progressSteps || []) {
+        if (step.status === 'planned' || step.status === 'running') step.status = 'unavailable'
+      }
+      message.progressExpanded = false
+      this.stopProgressClock()
+    },
+    scrollToResponseStart (message) {
+      this.$nextTick(() => {
+        const pane = this.$refs.messages
+        const id = message && (message.localId || message.id)
+        const bubble = pane && [...pane.querySelectorAll('[data-message-local-id]')].find(node => node.dataset.messageLocalId === String(id))
+        if (pane && bubble) pane.scrollTop += bubble.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16
+      })
+    },
     async stopGeneration () {
       if (!this.sending && !this.generatingStrategy) return
       this.generationStopped = true
@@ -1424,6 +1475,7 @@ export default {
         if (message.isThinking) message.content = this.isZh ? '已停止生成。' : 'Generation stopped.'
         message.isThinking = false
         message.progressPhase = ''
+        this.finishProgress(message)
         if (message.content && message.content !== '已停止生成。' && message.content !== 'Generation stopped.') {
           message.streamWarning = this.isZh ? '已停止，以上为未完成内容。' : 'Stopped; the text above is incomplete.'
         }
@@ -1721,6 +1773,7 @@ export default {
     },
     async loadHistory (sessionId) {
       this.resetComposerDraft()
+      this.responseStartLocked = false
       this.sessionId = sessionId
       this.mobileSessionsOpen = false
       try {
@@ -1793,6 +1846,7 @@ export default {
     },
     newSession () {
       this.resetComposerDraft()
+      this.responseStartLocked = false
       this.sessionId = null
       this.messages = []
       this.mobileSessionsOpen = false
@@ -4334,6 +4388,7 @@ export default {
       const generationId = (Number(this.generationSequence) || 0) + 1
       this.generationSequence = generationId
       this.generationStopped = false
+      this.responseStartLocked = false
       this.activeGenerationController = new AbortController()
       this.activeGenerationRequestId = globalThis.crypto && globalThis.crypto.randomUUID
         ? globalThis.crypto.randomUUID()
@@ -4388,18 +4443,23 @@ export default {
         content: this.thinkingText,
         isThinking: true,
         progressPhase: 'routing',
+        progressExpanded: true,
+        progressSteps: [{ key: 'routing', label: this.isZh ? '识别任务' : 'Route request', status: 'running', detail: this.isZh ? '确认标的与研究范围' : 'Identifying the target and research scope' }],
         meta: '',
         created_at: new Date().toISOString()
       }
       this.messages.push(assistantMsg)
       this.activeAssistantMessage = assistantMsg
-      this.scrollToBottom()
+      this.responseStartLocked = true
+      this.startProgressClock()
+      this.scrollToResponseStart(assistantMsg)
       const preflight = this.loadAgentPreflight()
       let routing
       try {
         routing = await this.handleBackendAgentIntent(content, attachments, contextLock)
       } catch (error) {
         if (generationId !== this.generationSequence) return
+        this.finishProgress(assistantMsg)
         this.replacePendingAssistant(assistantMsg, { role: 'assistant', content: error.message || this.text.chatUnavailable, isThinking: false })
         this.sending = false
         return
@@ -4407,6 +4467,7 @@ export default {
       if (generationId !== this.generationSequence) return
       if (routing.handled) {
         this.messages = this.messages.filter(item => item.localId !== assistantMsg.localId)
+        this.stopProgressClock()
         this.sending = false
         this.scrollToBottom()
         return
@@ -4415,6 +4476,7 @@ export default {
       if (generationId !== this.generationSequence) return
       const blockers = this.agentPreflight && Array.isArray(this.agentPreflight.blockers) ? this.agentPreflight.blockers : []
       if (blockers.length) {
+        this.finishProgress(assistantMsg)
         const guide = this.buildPreflightGuide(this.pendingAgentTask)
         const guideMessage = this.replacePendingAssistant(assistantMsg, {
           localId: `local-${localId++}`,
@@ -4454,6 +4516,7 @@ export default {
         } catch (streamError) {
           if (generationId !== this.generationSequence) return
           if (streamError && streamError.name === 'AbortError') {
+            this.finishProgress(assistantMsg)
             if (this.$set) this.$set(assistantMsg, 'generationCancelled', true)
             else assistantMsg.generationCancelled = true
             if (assistantMsg.isThinking) assistantMsg.content = this.isZh ? '已停止生成。' : 'Generation stopped.'
@@ -4462,6 +4525,7 @@ export default {
             return
           }
           if (streamError && (streamError.streamAccepted || streamError.streamHasContent)) {
+            this.finishProgress(assistantMsg)
             const hasContent = Boolean(String(assistantMsg.content || '').trim()) && !assistantMsg.isThinking
             assistantMsg.isThinking = false
             if (hasContent) {
@@ -4503,12 +4567,14 @@ export default {
           meta: data.intent ? `${data.intent}${Number.isFinite(data.confidence) ? ` · ${data.confidence}%` : ''}` : ''
         })
         fallbackAssistant.created_at = fallbackAssistant.created_at || new Date().toISOString()
+        this.finishProgress(assistantMsg)
         this.appendMemoryActions(fallbackAssistant, data.memory_candidates)
         this.appendAgentNextActions(fallbackAssistant)
         this.loadSessions()
         this.loadSessionMemory()
       } catch (e) {
         if (generationId !== this.generationSequence) return
+        this.finishProgress(assistantMsg)
         const guide = this.buildSetupGuide(e, chatContext)
         const setupMsg = this.replacePendingAssistant(assistantMsg, {
           localId: `local-${localId++}`,
@@ -4781,6 +4847,15 @@ export default {
         this.sessionId = payload.session_id || this.sessionId
       } else if (eventName === 'progress') {
         assistantMsg.progressPhase = payload.phase || ''
+        if (payload.phase === 'context') {
+          this.updateProgressStep(assistantMsg, 'routing', this.isZh ? '识别任务' : 'Route request', 'success', this.isZh ? '已确定研究范围' : 'Research scope identified')
+        } else if (payload.phase === 'generation') {
+          this.updateProgressStep(assistantMsg, 'generation', this.isZh ? '模型生成' : 'Model response', 'running', this.isZh ? '基于已获取的证据生成回答' : 'Generating from collected evidence')
+        }
+      } else if (eventName === 'tool_progress') {
+        const status = payload.status === 'planned' ? 'running' : (payload.status || 'unknown')
+        this.updateProgressStep(assistantMsg, payload.tool || 'research', payload.label || payload.tool || '', status,
+          payload.detail || (this.isZh ? '正在查询数据…' : 'Looking up data…'))
       } else if (eventName === 'meta') {
         this.sessionId = payload.session_id || this.sessionId
         assistantMsg.meta = payload.intent || ''
@@ -4789,7 +4864,7 @@ export default {
         assistantMsg.contextManifest = payload.context_manifest || null
       } else if (eventName === 'delta') {
         if (payload.text) this.clearThinkingMessage(assistantMsg)
-        assistantMsg.progressPhase = ''
+        assistantMsg.progressPhase = 'generation'
         assistantMsg.content += payload.text || ''
       } else if (eventName === 'replace') {
         if (payload.text) this.clearThinkingMessage(assistantMsg)
@@ -4801,6 +4876,8 @@ export default {
           : (payload.msg || this.text.streamIncomplete)
       } else if (eventName === 'done') {
         assistantMsg.progressPhase = ''
+        this.updateProgressStep(assistantMsg, 'generation', this.isZh ? '模型生成' : 'Model response', 'success', this.isZh ? '回答已生成' : 'Answer completed')
+        this.finishProgress(assistantMsg)
         this.sessionId = payload.session_id || this.sessionId
         if (payload.message_id) this.$set ? this.$set(assistantMsg, 'id', payload.message_id) : (assistantMsg.id = payload.message_id)
         assistantMsg.created_at = assistantMsg.created_at || new Date().toISOString()
@@ -5242,6 +5319,7 @@ export default {
       )
     },
     scrollToBottom () {
+      if (this.responseStartLocked) return
       this.$nextTick(() => {
         const el = this.$refs.messages
         if (el) el.scrollTop = el.scrollHeight
@@ -9366,5 +9444,185 @@ body.dark .copilot-workbench .research-mode-bar button,
 body.realdark .copilot-workbench .research-mode-bar button,
 .theme-dark .copilot-workbench .research-mode-bar button {
   background: #111311 !important;
+}
+
+/* Research workspace: inputs and watchlist on the left, uninterrupted reading on the right. */
+.copilot-workbench {
+  grid-template-columns: clamp(320px, 28vw, 390px) minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.copilot-workbench > .chat-panel {
+  display: contents;
+}
+
+.copilot-workbench > .right-rail {
+  display: flex !important;
+  grid-column: 1;
+  grid-row: 1 / 3;
+  overflow-y: auto;
+  border: 1px solid var(--qd-border-soft);
+  border-radius: 12px;
+  background: var(--qd-panel);
+}
+
+.copilot-workbench .right-rail .watch-panel {
+  flex: none;
+  min-height: 0;
+  max-height: 65%;
+  overflow-y: auto;
+}
+
+.copilot-workbench .right-rail .monitor-panel {
+  flex: 1;
+  min-height: 110px;
+  overflow-y: auto;
+}
+
+.copilot-workbench .chat-hero {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+  border: 1px solid var(--qd-border-soft);
+  border-radius: 12px 12px 0 0;
+}
+
+.copilot-workbench .messages {
+  grid-column: 2;
+  grid-row: 2 / 4;
+  min-height: 0;
+  border: 1px solid var(--qd-border-soft);
+  border-radius: 0 0 12px 12px;
+}
+
+.copilot-workbench .message.assistant .bubble {
+  max-width: ~"min(1080px, 94%)";
+}
+
+.copilot-workbench .composer {
+  grid-column: 1;
+  grid-row: 3;
+  min-height: 0;
+  max-height: ~"min(65vh, 650px)";
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--qd-border-soft);
+  border-radius: 12px;
+}
+
+.copilot-workbench .composer-context-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.copilot-workbench .composer-context-bar > * {
+  width: 100%;
+  min-width: 0;
+}
+
+.copilot-workbench .research-mode-bar {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.copilot-workbench .composer-actions {
+  flex-wrap: wrap;
+}
+
+.copilot-workbench .followup-suggestions {
+  z-index: 2;
+  grid-column: 2;
+  grid-row: 3;
+  align-self: end;
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+.copilot-workbench > .left-rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 1004;
+  display: none !important;
+  width: ~"min(360px, 90vw)";
+  padding: 54px 12px 12px;
+  overflow-y: auto;
+  background: var(--qd-bg);
+  box-shadow: 18px 0 44px rgba(0, 0, 0, 0.24);
+}
+
+.copilot-workbench > .left-rail.mobile-open {
+  display: flex !important;
+}
+
+.copilot-workbench .mobile-sessions-trigger,
+.copilot-workbench .mobile-rail-close,
+.copilot-workbench .mobile-rail-backdrop {
+  display: inline-flex;
+}
+
+.copilot-workbench .mobile-rail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1003;
+  background: rgba(0, 0, 0, 0.56);
+}
+
+.copilot-workbench .mobile-rail-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--qd-border);
+  border-radius: 8px;
+  background: var(--qd-panel);
+}
+
+.research-progress {
+  margin: 0 0 16px;
+  border: 1px solid var(--qd-border-soft);
+  border-radius: 10px;
+  background: var(--qd-panel-soft);
+}
+
+.research-progress__toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--qd-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.research-progress__toggle span { flex: 1; font-weight: 700; }
+.research-progress__toggle small { color: var(--qd-text-muted); font-size: 11px; }
+.research-progress__steps { display: grid; gap: 2px; padding: 2px 12px 12px; }
+.research-progress__step { display: flex; align-items: flex-start; gap: 9px; padding: 6px 0; color: var(--qd-text-muted); }
+.research-progress__step .anticon { margin-top: 3px; }
+.research-progress__step.is-success .anticon { color: var(--qd-green); }
+.research-progress__step.is-running .anticon { color: var(--qd-accent); }
+.research-progress__step strong { display: block; color: var(--qd-text); font-size: 12px; }
+.research-progress__step span { display: block; font-size: 12px; }
+
+@media (max-width: 960px) {
+  .copilot-workbench {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto minmax(105px, auto) minmax(0, 1fr) auto;
+    overflow-y: auto;
+  }
+  .copilot-workbench > .right-rail { grid-column: 1; grid-row: 2; max-height: 150px; }
+  .copilot-workbench .right-rail .monitor-panel { display: none; }
+  .copilot-workbench .chat-hero { grid-column: 1; grid-row: 1; }
+  .copilot-workbench .messages { grid-column: 1; grid-row: 3; min-height: 320px; }
+  .copilot-workbench .composer { grid-column: 1; grid-row: 4; max-height: none; }
+  .copilot-workbench .followup-suggestions { grid-column: 1; grid-row: 3; }
 }
 </style>
