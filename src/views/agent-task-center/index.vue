@@ -21,12 +21,12 @@
     <section v-if="monitorMode" class="task-section monitor-workflow">
       <div class="section-heading"><div><h2>{{ copy === wordsZh ? '事件驱动工作流' : 'Event-driven workflow' }}</h2><p>{{ copy === wordsZh ? '目前只开放研究环节；自动下单链路尚未接入。' : 'Research stages are available; automatic order execution is not connected yet.' }}</p></div></div>
       <div class="workflow-steps">
-        <div><strong>01 · {{ copy === wordsZh ? '触发检查' : 'Trigger check' }}</strong><span>{{ copy === wordsZh ? '定时 / 价位 / 交易时段' : 'Schedule / price / market session' }}</span></div>
+        <div><strong>01 · {{ copy === wordsZh ? '触发检查' : 'Trigger check' }}</strong><span>{{ copy === wordsZh ? '定时 / 价位 / 新闻 / 交易时段' : 'Schedule / price / news / market session' }}</span></div>
         <div><strong>02 · {{ copy === wordsZh ? 'Agent 分析' : 'Agent analysis' }}</strong><span>{{ copy === wordsZh ? '研究简报与模型随任务保存' : 'Brief and model saved with each task' }}</span></div>
         <div><strong>03 · {{ copy === wordsZh ? '机会线索' : 'Research lead' }}</strong><span>{{ copy === wordsZh ? '可审阅并生成策略候选' : 'Review and draft a strategy candidate' }}</span></div>
         <div class="workflow-disabled"><strong>04 · {{ copy === wordsZh ? '模拟交易' : 'Paper execution' }}</strong><span>{{ copy === wordsZh ? '未联动；不会自动下单' : 'Not connected; no automatic orders' }}</span></div>
       </div>
-      <p class="workflow-note">{{ copy === wordsZh ? '新闻热点触发也尚未接入。后续需把可信事件、交易意图、风险门禁和账户授权串起来，才能开放自动执行。' : 'News-event triggers are not connected yet. Trusted events, trade intents, risk gates and account authorization must be linked before automatic execution can be enabled.' }}</p>
+      <p class="workflow-note">{{ copy === wordsZh ? '新闻触发目前只会启动研究；来源和时效需要人工核实。交易意图、风险门禁与账户授权尚未联通，绝不会由新闻直接下单。' : 'News events can trigger research only. Verify source and freshness; news never submits an order.' }}</p>
     </section>
 
     <section v-if="!monitorMode" class="task-section">
@@ -80,7 +80,7 @@
     <div class="task-columns">
       <section class="task-section">
         <div class="section-heading">
-          <div><h2>{{ copy.monitorTitle }}</h2><p>{{ copy.monitorHint }}</p></div>
+          <div><h2>{{ copy.monitorTitle }}</h2><p>{{ copy === wordsZh ? '定时检查观察标的；可用价格、交易时段或近期新闻触发研究。' : 'Check watchlist symbols on a schedule; price, session and recent news can trigger research.' }}</p></div>
           <a-button type="primary" icon="plus" :disabled="!watchlist.length" @click="openCreateMonitor">{{ copy.createMonitor }}</a-button>
         </div>
         <a-alert type="info" show-icon :message="copy.monitorBoundary" class="task-alert" />
@@ -155,7 +155,7 @@
         <a-form-item :label="copy.target"><a-select v-model="selectedWatchKey" :placeholder="copy.chooseTarget"><a-select-option v-for="item in watchlist" :key="`${item.market}:${item.symbol}`" :value="`${item.market}:${item.symbol}`">{{ item.market }} · {{ item.symbol }} {{ item.name || '' }}</a-select-option></a-select></a-form-item>
         <a-form-item :label="copy.interval"><a-select v-model="intervalMinutes"><a-select-option :value="60">1 {{ copy.hour }}</a-select-option><a-select-option :value="240">4 {{ copy.hours }}</a-select-option><a-select-option :value="720">12 {{ copy.hours }}</a-select-option><a-select-option :value="1440">1 {{ copy.day }}</a-select-option></a-select></a-form-item>
         <ResearchTaskFields v-model="researchForm" :market="String(selectedWatchKey || '').split(':')[0]" :is-zh="copy === wordsZh" />
-        <a-alert type="info" show-icon :message="copy.createBoundary" />
+        <a-alert type="info" show-icon :message="copy === wordsZh ? '新任务默认暂停。事件仅触发研究，不会自动下单。' : 'New tasks start paused. Events trigger research only, never orders.'" />
       </a-form>
     </a-modal>
     <a-drawer
@@ -438,7 +438,7 @@ export default {
       const zh = this.copy === words.zh
       const window = { always: zh ? '不限时段' : 'Any time', regular: zh ? '常规交易时段' : 'Regular session', after_close: zh ? '收盘后 1 小时' : 'First hour after close' }[config.session_window || 'always']
       const trigger = config.trigger || { type: 'scheduled' }
-      return window + ' · ' + (trigger.type === 'scheduled' ? (zh ? '按间隔分析' : 'Scheduled') : `${trigger.type === 'price_above' ? '≥' : '≤'} ${trigger.price}`)
+      return window + ' · ' + (trigger.type === 'scheduled' ? (zh ? '按间隔分析' : 'Scheduled') : trigger.type === 'news_event' ? (zh ? '相关新闻事件' : 'Relevant news') : `${trigger.type === 'price_above' ? '≥' : '≤'} ${trigger.price}`)
     },
     async runResearchMonitor (monitor) {
       if (this.runningMonitorId) return
@@ -460,7 +460,7 @@ export default {
           name: `AI-${item.symbol}-${this.intervalMinutes}m`,
           position_ids: [],
           monitor_type: 'ai',
-          config: { ...((this.editingMonitor && this.editingMonitor.config) || {}), ...researchTaskConfig(this.researchForm), market: item.market, symbol: item.symbol, run_interval_minutes: this.intervalMinutes, language: this.$i18n.locale },
+          config: { ...((this.editingMonitor && this.editingMonitor.config) || {}), ...researchTaskConfig(this.researchForm), market: item.market, symbol: item.symbol, company_name: item.name || '', run_interval_minutes: this.intervalMinutes, language: this.$i18n.locale },
           notification_config: { channels: ['browser'] },
           is_active: false
         }

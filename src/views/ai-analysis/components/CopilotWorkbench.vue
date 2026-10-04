@@ -199,7 +199,10 @@
                 <span>{{ isZh ? '记忆' : 'Memories' }} {{ msg.contextManifest.memory_count || 0 }}</span>
                 <span v-if="msg.contextManifest.price_source">{{ isZh ? '行情' : 'Quote' }} {{ msg.contextManifest.price_source }} · {{ formatContextTime(msg.contextManifest.price_time || msg.contextManifest.snapshot_time, $i18n && $i18n.locale) }}</span>
                 <span v-if="msg.contextManifest.timeframes && msg.contextManifest.timeframes.length">K {{ msg.contextManifest.timeframes.join(', ') }}</span>
-                <span>{{ isZh ? '新闻检索' : 'News results' }} {{ msg.contextManifest.news_count || 0 }}</span>
+                <span v-if="msg.contextManifest.web_search_status === 'not_requested'">{{ isZh ? '网页／新闻：本次未检索' : 'Web/news: not searched this turn' }}</span>
+                <span v-else-if="msg.contextManifest.web_search_status === 'no_results'">{{ isZh ? '网页／新闻：已检索，未取得可用结果' : 'Web/news: searched, no usable results' }}</span>
+                <span v-else>{{ isZh ? '网页／新闻检索结果' : 'Web/news search results' }} {{ msg.contextManifest.news_count || 0 }}</span>
+                <span v-if="msg.contextManifest.web_search_method">{{ isZh ? '来源：项目检索工具（非模型厂商内置搜索）' : 'Source: app search tools (not provider built-in search)' }}</span>
                 <span>{{ isZh ? '券商成交记录未自动提供' : 'Broker fills not automatically included' }}</span>
                 <span v-if="msg.contextUsage && msg.contextUsage.context_truncated">{{ isZh ? '上下文超限，已压缩部分较早内容' : 'Context budget reached; older content was compacted' }}</span>
               </div>
@@ -3752,6 +3755,7 @@ export default {
       const sessionId = this.sessionId
       const res = await classifyAgentIntent({
         llm_selection: { ...this.llmSelection },
+        request_id: this.activeGenerationRequestId,
         session_id: sessionId,
         message: content,
         attachments,
@@ -4331,6 +4335,12 @@ export default {
       this.generationSequence = generationId
       this.generationStopped = false
       this.activeGenerationController = new AbortController()
+      this.activeGenerationRequestId = globalThis.crypto && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const n = Math.floor(Math.random() * 16)
+          return (c === 'x' ? n : (n & 3) | 8).toString(16)
+        })
       this.sending = true
       const beforeSendCount = this.messages.length
       const createdAt = new Date().toISOString()
@@ -4647,12 +4657,7 @@ export default {
     async sendMessageStream (content, attachments, assistantMsg, chatContext = null, referencedReportId = null, routingToken = '', routingSessionId = undefined) {
       if (!window.fetch || !window.ReadableStream) throw new Error('Streaming is not supported')
       const controller = this.activeGenerationController || new AbortController()
-      const requestId = window.crypto && window.crypto.randomUUID
-        ? window.crypto.randomUUID()
-        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const n = Math.floor(Math.random() * 16)
-          return (c === 'x' ? n : (n & 3) | 8).toString(16)
-        })
+      const requestId = this.activeGenerationRequestId
       this.activeGenerationController = controller
       this.activeGenerationRequestId = requestId
       const language = this.$i18n ? this.$i18n.locale : 'zh-CN'

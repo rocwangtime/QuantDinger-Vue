@@ -23,10 +23,10 @@ function deferred () {
 }
 
 function workspace (classify = async () => ({ data: { intent: 'market_analysis', should_execute: false } })) {
-  const calls = { resolve: 0, classify: 0, preflight: 0, contextBuilds: 0, stream: [], streamRouting: [] }
+  const calls = { resolve: 0, classify: 0, preflight: 0, contextBuilds: 0, stream: [], streamRouting: [], routingRequestId: '' }
   const vm = {
     ...loadMethods(['sendMessage', 'classifyAgentPlan', 'handleBackendAgentIntent'], {
-      classifyAgentIntent: (...args) => { calls.classify++; return classify(...args) }
+      classifyAgentIntent: (...args) => { calls.classify++; calls.routingRequestId = args[0].request_id; return classify(...args) }
     }),
     canSend: true, draft: 'Analyze SPCX trend, momentum and liquidity.', attachments: [], messages: [], context: {},
     thinkingText: 'thinking', text: { chatUnavailable: 'unavailable' }, $i18n: { locale: 'en-US' },
@@ -56,6 +56,7 @@ test('thinking is visible while routing is pending and routing runs once per mes
   assert.equal(vm.messages[1].isThinking, true)
   assert.equal(calls.preflight, 1)
   assert.equal(calls.classify, 1)
+  assert.equal(calls.routingRequestId, vm.activeGenerationRequestId)
   const plan = { intent: 'market_analysis', should_execute: false }
   gate.resolve({ data: plan })
   await sending
