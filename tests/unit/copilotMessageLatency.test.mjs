@@ -191,3 +191,16 @@ test('research tool steps remain visible during streaming and collapse after com
   assert.equal(reply.progressExpanded, false)
   assert.equal(reply.progressSteps[0].detail, '3 条可用结果')
 })
+
+test('unfinished tool steps do not claim to still be querying after completion', () => {
+  const vm = {
+    ...loadMethods(['handleStreamEvent', 'updateProgressStep', 'finishProgress', 'clearThinkingMessage']),
+    isZh: true, sessionId: 1, stopProgressClock () {},
+    setAgentUsageActions () {}, appendMemoryActions () {}, appendAgentNextActions () {}, loadSessionMemory () {}
+  }
+  const reply = { role: 'assistant', content: '思考中', isThinking: true, progressSteps: [], progressExpanded: true }
+  vm.handleStreamEvent('event: tool_progress\ndata: {"tool":"technical_analysis.compute","label":"技术指标","status":"planned"}', reply)
+  vm.handleStreamEvent('event: done\ndata: {}', reply)
+  assert.equal(reply.progressSteps[0].status, 'unavailable')
+  assert.equal(reply.progressSteps[0].detail, '本次未返回该项数据')
+})

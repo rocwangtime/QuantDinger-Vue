@@ -1452,7 +1452,10 @@ export default {
     finishProgress (message) {
       if (!message) return
       for (const step of message.progressSteps || []) {
-        if (step.status === 'planned' || step.status === 'running') step.status = 'unavailable'
+        if (step.status === 'planned' || step.status === 'running') {
+          step.status = 'unavailable'
+          step.detail = this.isZh ? '本次未返回该项数据' : 'No result returned for this step'
+        }
       }
       message.progressExpanded = false
       this.stopProgressClock()
