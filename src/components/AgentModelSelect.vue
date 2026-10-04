@@ -7,6 +7,10 @@
         :value="selectedKey || undefined"
         :loading="loading"
         :disabled="disabled || loading"
+        :title="selectedLabel"
+        :dropdown-match-select-width="false"
+        :dropdown-style="{ width: 'min(520px, calc(100vw - 24px))' }"
+        dropdown-class-name="agent-model-dropdown"
         :placeholder="isZh ? '选择已配置的模型' : 'Select a configured model'"
         :aria-label="isZh ? 'Agent 模型' : 'Agent model'"
         @change="selectModel">
@@ -17,13 +21,14 @@
         <a-select-option v-for="effort in efforts" :key="effort" :value="effort">{{ effortName(effort) }}</a-select-option>
       </a-select>
       <a-button
+        class="agent-model-refresh"
         size="small"
         :disabled="disabled"
         :loading="loading"
         :title="isZh ? '刷新模型列表' : 'Refresh models'"
         icon="reload"
         @click="load" />
-      <router-link :to="{ path: '/settings', query: { section: 'ai-llm' } }" :aria-label="isZh ? '配置模型' : 'Configure models'" :title="isZh ? '配置模型' : 'Configure models'">
+      <router-link class="agent-model-settings" :to="{ path: '/settings', query: { section: 'ai-llm' } }" :aria-label="isZh ? '配置模型' : 'Configure models'" :title="isZh ? '配置模型' : 'Configure models'">
         <a-icon v-if="compact" type="setting" /><template v-else>{{ isZh ? '配置模型' : 'Configure models' }}</template>
       </router-link>
     </div>
@@ -41,6 +46,7 @@ export default {
     isZh () { return String(this.$i18n.locale).startsWith('zh') },
     selectedKey () { return modelKey(this.value) },
     selected () { return this.items.find(item => modelKey(item) === this.selectedKey) },
+    selectedLabel () { return this.selected ? `${this.providerName(this.selected.provider)} · ${this.selected.model}` : '' },
     efforts () { return this.selected ? this.selected.reasoning_options : ['default'] },
     note () {
       if (this.error) return this.error
@@ -101,4 +107,29 @@ small { display: block; color: #9299a4; line-height: 1.5; margin-top: 6px; }
 .agent-model-controls--compact .agent-reasoning { width: 96px; flex: 0 0 96px; }
 .agent-model-controls--compact a { flex: 0 0 auto; }
 .agent-model-controls--compact small { font-size: 11px; }
+.agent-model-controls--compact .agent-model-refresh,
+.agent-model-controls--compact .agent-model-settings {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 1;
+  vertical-align: middle;
+}
+.agent-model-controls--compact .agent-model-settings { border-radius: 4px; }
+.agent-model-controls--compact .agent-model-settings:hover { background: rgba(127, 127, 127, 0.1); }
+</style>
+<style>
+.agent-model-dropdown .ant-select-dropdown-menu-item {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.4;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
 </style>
