@@ -85,6 +85,13 @@
             <span class="eyebrow">{{ text.title }}</span>
             <p>{{ text.subtitle }}</p>
           </div>
+          <div class="conversation-switcher">
+            <span class="conversation-switcher__current"><a-icon type="message" /> {{ currentConversationLabel }}</span>
+            <div class="conversation-switcher__actions">
+              <button type="button" :disabled="sending || generatingStrategy" @click="newSession()"><a-icon type="plus" /> {{ isZh ? '新对话 · 保留标的' : 'New chat · keep symbol' }}</button>
+              <button type="button" :disabled="sending || generatingStrategy" @click="newSession({ clearTarget: true })">{{ isZh ? '空白新对话' : 'Blank new chat' }}</button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -324,6 +331,13 @@
             <a-icon type="bulb" />
             <span>{{ sessionMemoryLabel }}</span>
           </button>
+        </div>
+        <div class="conversation-context-hint" role="status">
+          <a-icon :type="sessionId ? 'history' : 'plus-circle'" />
+          <span>{{ sessionId
+            ? (isZh ? '继续当前对话：会参考本对话的近期消息和摘要' : 'Continuing this chat: recent messages and its summary are included')
+            : (isZh ? '新对话：不带入其他聊天记录' : 'New chat: other conversations are not included') }}</span>
+          <span v-if="!sessionId && context.symbol">{{ isZh ? '标的仍为' : 'Symbol remains' }} {{ currentContextLabel }}</span>
         </div>
         <div v-if="draftReferencedReportId" class="referenced-report-chip">
           <a-icon type="link" />
@@ -1346,6 +1360,11 @@ export default {
       if (!target || !target.symbol) return this.text.contextAutoInfer
       return `${target.market}:${target.symbol}`
     },
+    currentConversationLabel () {
+      if (!this.sessionId) return this.isZh ? '尚未开始的新对话' : 'New chat, not started'
+      const session = (this.sessions || []).find(item => String(item.id) === String(this.sessionId))
+      return session && session.title ? session.title : (this.isZh ? '当前对话' : 'Current chat')
+    },
     hasSessionSummary () {
       return !!(this.sessionMemory && this.sessionMemory.summary && Object.keys(this.sessionMemory.summary).length)
     },
@@ -1794,6 +1813,7 @@ export default {
       this.resetComposerDraft()
       this.responseStartLocked = false
       this.sessionId = sessionId
+      this.activeWorkspaceTab = 'ask'
       this.mobileSessionsOpen = false
       try {
         const res = await getChatHistory({ session_id: sessionId })
@@ -1863,14 +1883,22 @@ export default {
         this.$message.error((e && e.response && e.response.data && e.response.data.msg) || (e && e.message) || this.text.sessionDeleteFailed)
       }
     },
-    newSession () {
+    newSession (options = {}) {
+      if (this.sending || this.generatingStrategy) return
       this.resetComposerDraft()
       this.responseStartLocked = false
       this.sessionId = null
       this.messages = []
       this.mobileSessionsOpen = false
+      this.activeWorkspaceTab = 'ask'
       this.sessionMemory = { summary: {}, recent_requests: [], version: 0 }
       this.draftReferencedReportId = null
+      if (options && options.clearTarget === true) {
+        this.context = { market: '', symbol: '' }
+        this.selectedSymbolValue = ''
+        this.symbolOptions = []
+        this.skipDefaultWatchSymbol = true
+      }
     },
     resetComposerDraft () {
       this.draft = ''
@@ -9821,5 +9849,54 @@ body.realdark .copilot-workbench .research-mode-bar button,
   .copilot-workbench .chat-hero { grid-column: 1; grid-row: 3; }
   .copilot-workbench .messages { grid-column: 1; grid-row: 4; min-height: 320px; }
   .copilot-workbench .followup-suggestions { grid-column: 1; grid-row: 4; }
+}
+
+.copilot-workbench .hero-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.copilot-workbench .hero-copy { flex: 1 1 auto; }
+.copilot-workbench .conversation-switcher { flex: 0 1 320px; min-width: 0; text-align: right; }
+.copilot-workbench .conversation-switcher__current {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 6px;
+  color: var(--qd-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copilot-workbench .conversation-switcher__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.copilot-workbench .conversation-switcher__actions button {
+  padding: 4px 8px;
+  border: 1px solid var(--qd-border);
+  border-radius: 7px;
+  background: var(--qd-panel);
+  color: var(--qd-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.copilot-workbench .conversation-switcher__actions button:hover { border-color: var(--qd-accent-border); color: var(--qd-accent); }
+.copilot-workbench .conversation-switcher__actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.copilot-workbench .conversation-context-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 10px 0 0;
+  color: var(--qd-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.copilot-workbench .conversation-context-hint .anticon { color: var(--qd-accent); }
+.copilot-workbench .conversation-context-hint span + span { color: var(--qd-text); font-weight: 700; }
+@media (max-width: 960px) {
+  .copilot-workbench .hero-main { flex-wrap: wrap; }
+  .copilot-workbench .conversation-switcher { flex: 1 1 100%; text-align: left; }
+  .copilot-workbench .conversation-switcher__actions { justify-content: flex-start; }
 }
 </style>

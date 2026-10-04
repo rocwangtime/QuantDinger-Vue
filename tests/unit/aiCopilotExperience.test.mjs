@@ -34,10 +34,20 @@ test('strategy generation reads artifact code from the API data envelope', () =>
 
 test('switching conversations clears workflow and composer state', () => {
   assert.match(copilot, /async loadHistory \(sessionId\) \{\s*this\.resetComposerDraft\(\)/)
-  assert.match(copilot, /newSession \(\) \{\s*this\.resetComposerDraft\(\)/)
+  assert.match(copilot, /newSession \(options = \{\}\) \{[\s\S]*?this\.resetComposerDraft\(\)/)
   for (const field of ['draft', 'attachments', 'draftContextLock', 'pendingAgentTask', 'monitorSetupDraft']) {
     assert.match(copilot, new RegExp(`this\\.${field} =`))
   }
+})
+
+test('a visible new-chat control distinguishes retained symbol from a blank chat', () => {
+  assert.match(copilot, /@click="newSession\(\)"[\s\S]*?新对话 · 保留标的/)
+  assert.match(copilot, /@click="newSession\(\{ clearTarget: true \}\)"[\s\S]*?空白新对话/)
+  assert.match(copilot, /继续当前对话：会参考本对话的近期消息和摘要/)
+  assert.match(copilot, /新对话：不带入其他聊天记录/)
+  assert.match(copilot, /if \(options && options\.clearTarget === true\) \{\s*this\.context = \{ market: '', symbol: '' \}/)
+  assert.match(copilot, /this\.skipDefaultWatchSymbol = true/)
+  assert.match(copilot, /this\.activeWorkspaceTab = 'ask'/)
 })
 
 test('language selector is click and keyboard accessible', () => {
