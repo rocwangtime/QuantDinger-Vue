@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-model-controls">
+  <div class="agent-model-controls" :class="{ 'agent-model-controls--compact': compact }">
     <div class="agent-model-row">
       <label>{{ isZh ? '本次模型' : 'Model' }}</label>
       <a-select
@@ -23,9 +23,11 @@
         :title="isZh ? '刷新模型列表' : 'Refresh models'"
         icon="reload"
         @click="load" />
-      <router-link :to="{ path: '/settings', query: { section: 'ai-llm' } }">{{ isZh ? '配置模型' : 'Configure models' }}</router-link>
+      <router-link :to="{ path: '/settings', query: { section: 'ai-llm' } }" :aria-label="isZh ? '配置模型' : 'Configure models'" :title="isZh ? '配置模型' : 'Configure models'">
+        <a-icon v-if="compact" type="setting" /><template v-else>{{ isZh ? '配置模型' : 'Configure models' }}</template>
+      </router-link>
     </div>
-    <small :class="{ 'model-error': error }">{{ note }}</small>
+    <small v-if="!compact || error || !items.length || (selectedKey && !selected)" :class="{ 'model-error': error }">{{ note }}</small>
   </div>
 </template>
 <script>
@@ -33,7 +35,7 @@ import { getAgentModels } from '@/api/market'
 import { modelKey, selectionFor, reasoningLabel, providerLabel } from '@/utils/agentModelSelection.mjs'
 export default {
   name: 'AgentModelSelect',
-  props: { value: { type: Object, default: () => ({}) }, disabled: Boolean, remember: Boolean },
+  props: { value: { type: Object, default: () => ({}) }, disabled: Boolean, remember: Boolean, compact: Boolean },
   data: () => ({ items: [], loading: false, error: '' }),
   computed: {
     isZh () { return String(this.$i18n.locale).startsWith('zh') },
@@ -92,4 +94,11 @@ export default {
 .agent-reasoning { width: 150px; }
 small { display: block; color: #9299a4; line-height: 1.5; margin-top: 6px; }
 .model-error { color: #e6a23c; }
+.agent-model-controls--compact { flex: 1 1 auto; min-width: 0; padding: 0; }
+.agent-model-controls--compact .agent-model-row { flex-wrap: nowrap; gap: 5px; }
+.agent-model-controls--compact label { display: none; }
+.agent-model-controls--compact .agent-model { width: auto; min-width: 0; flex: 1 1 155px; }
+.agent-model-controls--compact .agent-reasoning { width: 96px; flex: 0 0 96px; }
+.agent-model-controls--compact a { flex: 0 0 auto; }
+.agent-model-controls--compact small { font-size: 11px; }
 </style>

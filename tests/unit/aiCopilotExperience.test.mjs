@@ -87,18 +87,26 @@ test('trading script editor actions are localized for every supported language',
   assert.doesNotMatch(copilot, /i18nText\('aiAssetAnalysis\.copilot\.openStrategyV2Ide',\s*'Open Trading Script editor'/)
 })
 
-test('research workspace keeps controls left, answer wide, and history behind an entry', () => {
-  assert.match(copilot, /grid-template-columns: clamp\(320px, 28vw, 390px\) minmax\(0, 1fr\) !important/)
-  assert.match(copilot, /\.copilot-workbench > \.right-rail \{[\s\S]*?grid-column: 1/)
-  assert.match(copilot, /\.copilot-workbench \.messages \{[\s\S]*?grid-column: 2/)
-  assert.match(copilot, /grid-row: ~"2 \/ 4"/)
-  assert.match(copilot, /grid-row: ~"1 \/ 3"/)
-  assert.match(copilot, /\.copilot-workbench \.composer \{[\s\S]*?grid-column: 1/)
+test('research workspace switches dedicated controls on the left and keeps answers wide', () => {
+  assert.match(copilot, /grid-template-columns: 78px clamp\(320px, 27vw, 390px\) minmax\(0, 1fr\) !important/)
+  assert.match(copilot, /activeWorkspaceTab: 'ask'/)
+  assert.match(copilot, /activeWorkspaceTab === 'watch'/)
+  assert.match(copilot, /activeWorkspaceTab === 'monitor'/)
+  assert.match(copilot, /<aside v-if="activeWorkspaceTab !== 'ask'"/)
+  assert.match(copilot, /<section v-if="activeWorkspaceTab === 'monitor'"/)
+  assert.match(copilot, /\.copilot-workbench \.messages \{ grid-column: 3; grid-row: 2; \}/)
+  assert.match(copilot, /\.copilot-workbench \.composer,[\s\S]*?grid-column: 2;/)
   assert.match(copilot, /mobileSessionsOpen = true/)
   assert.match(copilot, /responseStartLocked/)
   assert.match(copilot, /research-progress__steps/)
-  assert.match(copilot, /monitorsOpen: false/)
-  assert.match(copilot, /max-height: ~"min\(48vh, 390px\)"/)
+  assert.match(copilot, /usePrompt \(prompt, options = \{\}\) \{\s*this\.activeWorkspaceTab = 'ask'/)
+})
+
+test('question editor puts the prompt above modes and model controls inside its footer', () => {
+  const editor = copilot.indexOf('<div class="question-editor">')
+  const modes = copilot.indexOf('<div class="research-mode-bar"')
+  assert.ok(editor >= 0 && modes > editor)
+  assert.match(copilot.slice(editor, modes), /<textarea[\s\S]*?<div class="composer-foot">[\s\S]*?<AgentModelSelect v-model="llmSelection" compact/)
 })
 
 test('saved prompts use compact chat-history rows instead of stretched grid cards', () => {
