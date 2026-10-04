@@ -9460,7 +9460,7 @@ body.realdark .copilot-workbench .research-mode-bar button,
 .copilot-workbench > .right-rail {
   display: flex !important;
   grid-column: 1;
-  grid-row: 1 / 3;
+  grid-row: ~"1 / 3";
   overflow-y: auto;
   border: 1px solid var(--qd-border-soft);
   border-radius: 12px;
@@ -9490,7 +9490,7 @@ body.realdark .copilot-workbench .research-mode-bar button,
 
 .copilot-workbench .messages {
   grid-column: 2;
-  grid-row: 2 / 4;
+  grid-row: ~"2 / 4";
   min-height: 0;
   border: 1px solid var(--qd-border-soft);
   border-radius: 0 0 12px 12px;

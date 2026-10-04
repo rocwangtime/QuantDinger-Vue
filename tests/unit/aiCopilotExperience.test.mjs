@@ -91,6 +91,8 @@ test('research workspace keeps controls left, answer wide, and history behind an
   assert.match(copilot, /grid-template-columns: clamp\(320px, 28vw, 390px\) minmax\(0, 1fr\) !important/)
   assert.match(copilot, /\.copilot-workbench > \.right-rail \{[\s\S]*?grid-column: 1/)
   assert.match(copilot, /\.copilot-workbench \.messages \{[\s\S]*?grid-column: 2/)
+  assert.match(copilot, /grid-row: ~"2 \/ 4"/)
+  assert.match(copilot, /grid-row: ~"1 \/ 3"/)
   assert.match(copilot, /\.copilot-workbench \.composer \{[\s\S]*?grid-column: 1/)
   assert.match(copilot, /mobileSessionsOpen = true/)
   assert.match(copilot, /responseStartLocked/)
