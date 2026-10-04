@@ -30,12 +30,12 @@ test('task center is the default workspace and keeps research and execution sepa
   assert.match(page, /openRuntime \(id\)/)
 })
 
-test('AI monitoring has a distinct entry and does not advertise automatic orders as available', () => {
+test('AI monitoring separates account execution from research-only news reminders', () => {
   assert.match(router, /path: '\/ai-monitor'/)
   assert.match(router, /workspaceMode: 'monitor'/)
   assert.match(layout, /paths: \['\/ai-monitor'\]/)
-  assert.match(page, /新闻触发目前只会启动研究/)
-  assert.match(page, /未联动；不会自动下单/)
+  assert.match(page, /新闻触发目前仅用于研究提醒/)
+  assert.match(page, /<AutomationPanel v-if="monitorMode"/)
 })
 
 test('new research schedules are paused and cannot place an order', () => {

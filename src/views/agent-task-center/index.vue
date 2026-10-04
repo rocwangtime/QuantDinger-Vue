@@ -4,7 +4,7 @@
       <div>
         <span class="eyebrow">{{ monitorMode ? (copy === wordsZh ? 'EVENT-DRIVEN AGENT' : 'EVENT-DRIVEN AGENT') : copy.eyebrow }}</span>
         <h1>{{ monitorMode ? (copy === wordsZh ? 'AI 盯盘' : 'AI Monitoring') : copy.title }}</h1>
-        <p>{{ monitorMode ? (copy === wordsZh ? '配置触发条件，让 Agent 定时复查并留下可审阅的机会线索。' : 'Configure triggers, re-run Agent research, and review opportunity leads.') : copy.subtitle }}</p>
+        <p>{{ monitorMode ? (copy === wordsZh ? '配置每日组合计划或实时价位触发，让 Agent 分析账户并跟踪模拟执行。' : 'Plan a daily portfolio or trigger on live prices, with account-aware analysis and paper execution tracking.') : copy.subtitle }}</p>
       </div>
       <a-button icon="reload" :loading="loading" @click="loadAll">{{ copy.refresh }}</a-button>
     </header>
@@ -18,15 +18,15 @@
       <div class="summary-safety"><a-icon type="safety-certificate" /><span>{{ copy.safetySummary }}</span></div>
     </section>
 
+    <AutomationPanel v-if="monitorMode" :watchlist="watchlist" />
     <section v-if="monitorMode" class="task-section monitor-workflow">
-      <div class="section-heading"><div><h2>{{ copy === wordsZh ? '事件驱动工作流' : 'Event-driven workflow' }}</h2><p>{{ copy === wordsZh ? '目前只开放研究环节；自动下单链路尚未接入。' : 'Research stages are available; automatic order execution is not connected yet.' }}</p></div></div>
+      <div class="section-heading"><div><h2>{{ copy === wordsZh ? '研究提醒' : 'Research reminders' }}</h2><p>{{ copy === wordsZh ? '下方保留只生成报告的研究提醒；账户交易任务使用上方两个模板。' : 'Research reminders below produce reports. Use the templates above for account-aware tasks.' }}</p></div></div>
       <div class="workflow-steps">
         <div><strong>01 · {{ copy === wordsZh ? '触发检查' : 'Trigger check' }}</strong><span>{{ copy === wordsZh ? '定时 / 价位 / 新闻 / 交易时段' : 'Schedule / price / news / market session' }}</span></div>
         <div><strong>02 · {{ copy === wordsZh ? 'Agent 分析' : 'Agent analysis' }}</strong><span>{{ copy === wordsZh ? '研究简报与模型随任务保存' : 'Brief and model saved with each task' }}</span></div>
         <div><strong>03 · {{ copy === wordsZh ? '机会线索' : 'Research lead' }}</strong><span>{{ copy === wordsZh ? '可审阅并生成策略候选' : 'Review and draft a strategy candidate' }}</span></div>
-        <div class="workflow-disabled"><strong>04 · {{ copy === wordsZh ? '模拟交易' : 'Paper execution' }}</strong><span>{{ copy === wordsZh ? '未联动；不会自动下单' : 'Not connected; no automatic orders' }}</span></div>
       </div>
-      <p class="workflow-note">{{ copy === wordsZh ? '新闻触发目前只会启动研究；来源和时效需要人工核实。交易意图、风险门禁与账户授权尚未联通，绝不会由新闻直接下单。' : 'News events can trigger research only. Verify source and freshness; news never submits an order.' }}</p>
+      <p class="workflow-note">{{ copy === wordsZh ? '这些研究提醒不下单。上方账户交易任务支持定时组合计划和实时价格触发；新闻触发目前仅用于研究提醒。' : 'These reminders never trade. Account tasks above support scheduled portfolio planning and live price triggers; news triggers remain research-only.' }}</p>
     </section>
 
     <section v-if="!monitorMode" class="task-section">
@@ -198,6 +198,7 @@
 import { mapState } from 'vuex'
 import { getMonitors, getMonitorRuns, getResearchOpportunities, updateResearchOpportunity, addMonitor, updateMonitor, runMonitor } from '@/api/portfolio'
 import ResearchTaskFields from '@/components/ResearchTaskFields.vue'
+import AutomationPanel from './AutomationPanel.vue'
 import { researchTaskForm, researchTaskConfig } from '@/utils/researchWorkflow.mjs'
 import { getWatchlist } from '@/api/market'
 import { getStrategyList, getScriptSourceList, getStrategyBacktestHistory } from '@/api/strategy'
@@ -250,7 +251,7 @@ save: 'Save',
 
 export default {
   name: 'AgentTaskCenter',
-  components: { ResearchTaskFields },
+  components: { ResearchTaskFields, AutomationPanel },
   props: { workspaceMode: { type: String, default: 'overview' } },
   data () {
     return { researchForm: researchTaskForm(), editingMonitor: null, runningMonitorId: null, loading: false, loadError: false, monitors: [], watchlist: [], strategies: [], scriptSources: [], backtests: [], updatingId: null, createVisible: false, creating: false, selectedWatchKey: undefined, intervalMinutes: 240, runsVisible: false, loadingRuns: false, selectedMonitor: null, monitorRuns: [], candidateLoadingKey: '', candidateDraft: '', candidatePhase: '', candidateController: null, candidateRequestId: '', opportunityFilter: 'new', opportunities: [], loadingOpportunities: false, opportunityRequestId: 0, updatingOpportunityId: null }
