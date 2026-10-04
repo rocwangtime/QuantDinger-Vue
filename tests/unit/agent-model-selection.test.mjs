@@ -16,6 +16,14 @@ test('saved research task roundtrips pinned provider model and effort', () => {
   const selection = selectionFor(ark, 'low')
   assert.deepEqual(researchTaskConfig(researchTaskForm({ llm_selection: selection })).llm_selection, selection)
 })
+test('compact model selector expands long names without clipping and aligns icon controls', () => {
+  const source = readFileSync(new URL('../../src/components/AgentModelSelect.vue', import.meta.url), 'utf8')
+  assert.match(source, /:dropdown-match-select-width="false"/)
+  assert.match(source, /dropdown-class-name="agent-model-dropdown"/)
+  assert.match(source, /width: 'min\(520px, calc\(100vw - 24px\)\)'/)
+  assert.match(source, /\.agent-model-dropdown \.ant-select-dropdown-menu-item \{[\s\S]*?white-space: normal;/)
+  assert.match(source, /\.agent-model-controls--compact \.agent-model-refresh,[\s\S]*?justify-content: center;/)
+})
 test('every Copilot LLM request explicitly carries the chosen settings', () => {
   const source = readFileSync(new URL('../../src/views/ai-analysis/components/CopilotWorkbench.vue', import.meta.url), 'utf8')
   for (const api of ['fastAnalyze', 'classifyAgentIntent', 'chatMessage']) {
