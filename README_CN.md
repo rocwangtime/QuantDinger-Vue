@@ -243,6 +243,9 @@ docker build -f Dockerfile.prebuilt -t quantdinger-frontend:local .
 
 ## 质量检查
 
+研究证据、AI 影子评估、组合风控及虚拟多腿界面的配置与验证，见
+[研究与执行控制说明（英文）](RESEARCH_EXECUTION.md)。
+
 提交改动前，请运行与改动范围相符的检查：
 
 ```bash

@@ -160,6 +160,7 @@
           <div><span class="eyebrow">{{ $t('strategyEvolution.completed') }}</span><h2>{{ result.source.name }}</h2></div>
           <a-button type="primary" icon="check" @click="$emit('apply', { sourceId: form.sourceId, params: result.bestParams })">{{ $t('strategyEvolution.applyBest') }}</a-button>
         </header>
+        <research-evidence :result="result" :job-id="jobId" :replaying="running" @replay="replayStudy" />
         <div class="study-facts">
           <span v-if="result.plan && result.plan.sampleCount"><b>{{ result.plan.sampleCount }}</b>{{ $t('strategyEvolution.marketBars') }}</span>
           <span v-if="result.plan && result.plan.effectiveFolds"><b>{{ result.plan.effectiveFolds }}</b>{{ $t('strategyEvolution.effectiveFolds') }}</span>
@@ -244,10 +245,13 @@ import * as echarts from 'echarts'
 import moment from 'moment'
 import { mapState } from 'vuex'
 import { cancelStrategyEvolutionJob, compileScriptSource, estimateStrategyEvolution, getScriptSourceList, getScriptSourceDetail, getStrategyEvolutionJob, getStrategyEvolutionJobs, getStrategyEvolutionParameterSpace, runStrategyEvolution } from '@/api/strategy'
+import ResearchEvidence from './ResearchEvidence.vue'
+import { replayEvolution } from '@/api/researchExecution'
 import { strategyParameterLabel } from '@/utils/strategyParameterPresentation'
 
 export default {
   name: 'StrategyEvolution',
+  components: { ResearchEvidence },
   data () {
     const end = moment().subtract(1, 'day').startOf('day')
     return {
@@ -564,6 +568,22 @@ export default {
     historyMethod (job) { return this.$t(`strategyEvolution.method.${((job.request || {}).config || {}).method || 'tpe'}`) },
     historyDateRange (job) { const request = job.request || {}; return request.startDate && request.endDate ? `${request.startDate} – ${request.endDate}` : '—' },
     formatDateTime (value) { return value ? moment(value).format('YYYY-MM-DD HH:mm') : '—' },
+    async replayStudy () {
+      if (this.running || !this.jobId) return
+      const original = this.jobId
+      this.running = true; this.progress = {}; this.disposeCharts()
+      try {
+        const response = await replayEvolution(original)
+        const id = String((response.data || {}).jobId || '')
+        if (!id) throw new Error(this.$t('strategyEvolution.jobNotCreated'))
+        this.jobId = id; this.result = null
+        await this.loadHistory(); await this.pollStudy()
+      } catch (error) {
+        this.running = false
+        this.$message.error(error.backendMessage || error.message || this.$t('strategyEvolution.runFailed'))
+        await this.$nextTick(); this.renderCharts()
+      }
+    },
     async runStudy () {
       this.running = true; this.result = null; this.progress = {}; this.disposeCharts()
       try {

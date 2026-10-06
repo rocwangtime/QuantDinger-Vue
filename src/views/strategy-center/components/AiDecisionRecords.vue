@@ -7,6 +7,7 @@
       </div>
       <a-button icon="reload" :loading="loading" @click="load">{{ $t('common.refresh') }}</a-button>
     </div>
+    <shadow-evaluation v-if="sourceType === 'strategy' && strategyId && !compact" :strategy-id="strategyId" />
     <a-spin :spinning="loading" aria-live="polite">
       <a-alert
         v-if="loadFailed"
@@ -74,11 +75,14 @@
 </template>
 
 <script>
+import ShadowEvaluation from './ShadowEvaluation.vue'
+import { decisionPresentation } from '@/utils/researchExecution'
 import { getStrategyAiDecisions } from '@/api/strategy'
 import { getQuickTradeAiDecisions } from '@/api/quick-trade'
 
 export default {
   name: 'AiDecisionRecords',
+  components: { ShadowEvaluation },
   props: {
     strategyId: { type: [Number, String], default: 0 },
     sourceType: { type: String, default: 'strategy' },
@@ -139,22 +143,30 @@ export default {
       }
     },
     decisionColor (row) {
+      const view = decisionPresentation(row)
+      if (view) return view.color
       if (row.decision === 'reject' || row.allowed === false) return 'red'
       if (row.decision === 'pass') return 'green'
       return 'orange'
     },
     decisionLabel (row) {
+      const view = decisionPresentation(row)
+      if (view) return this.$t('researchExecution.' + view.label)
       const key = row.decision === 'reject' || row.allowed === false
         ? 'aiDecisionFilter.decisionReject'
         : row.decision === 'pass' ? 'aiDecisionFilter.decisionPass' : 'aiDecisionFilter.decisionSkipped'
       return this.$t(key)
     },
     executionColor (row) {
+      const view = decisionPresentation(row)
+      if (view) return view.color
       if (row.decision === 'reject' || row.allowed === false) return 'red'
       if (row.decision === 'skipped' || row.provider === 'none') return 'orange'
       return 'blue'
     },
     executionLabel (row) {
+      const view = decisionPresentation(row)
+      if (view) return this.$t('researchExecution.' + view.execution)
       if (row.decision === 'reject' || row.allowed === false) return this.$t('aiDecisionFilter.executionNotSubmitted')
       if (row.decision === 'skipped' || row.provider === 'none') return this.$t('aiDecisionFilter.executionFailOpen')
       return this.$t('aiDecisionFilter.executionReleased')
@@ -194,11 +206,11 @@ export default {
     },
     decisionChecks (row) {
       const checks = row && row.checks_json
-      if (Array.isArray(checks)) return checks
+      if (Array.isArray(checks)) return checks.filter(check => check && check.name !== 'entry_policy')
       if (typeof checks !== 'string') return []
       try {
         const parsed = JSON.parse(checks)
-        return Array.isArray(parsed) ? parsed : []
+        return Array.isArray(parsed) ? parsed.filter(check => check && check.name !== 'entry_policy') : []
       } catch (e) {
         return []
       }

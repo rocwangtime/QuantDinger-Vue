@@ -243,6 +243,9 @@ docker build -f Dockerfile.prebuilt -t quantdinger-frontend:local .
 
 ## Quality checks
 
+For the research evidence, AI shadow evaluation, portfolio-risk and virtual
+multi-leg desktop controls, see [Research and execution controls](RESEARCH_EXECUTION.md).
+
 Run the relevant checks before submitting a change:
 
 ```bash
