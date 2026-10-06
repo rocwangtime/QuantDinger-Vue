@@ -33,6 +33,8 @@
             <span>{{ dashboard.task.config.market }} · {{ currency }} · {{ t('budget') }} {{ money(dashboard.task.config.budget) }}</span>
             <span v-if="dashboard.task.schedule">{{ t('nextReview') }} {{ date(dashboard.task.schedule.run_at) }}</span>
           </div>
+          <p v-if="dashboard.task.decision_budget" class="task-footnote">{{ t('decisionQuota') }} {{ decisionQuota.used }} / {{ decisionQuota.limit }} · {{ t('quotaReset') }} {{ date(decisionQuota.resets_at) }}</p>
+          <p v-if="dashboard.task.config.kind === 'event_portfolio'" class="task-footnote">{{ t('eventHint') }}</p>
           <a-alert :type="risk.halted || risk.stopped_symbols && risk.stopped_symbols.length ? 'warning' : riskFresh ? 'success' : 'info'" show-icon :message="protectionStatus">
             <div slot="description">
               <p v-if="risk.stopped_symbols && risk.stopped_symbols.length">{{ t('stopped') }}: {{ risk.stopped_symbols.join(', ') }}</p>
@@ -95,6 +97,8 @@
               </div>
             </div>
             <p>{{ run.phase }}</p>
+            <small v-if="run.result.event">{{ t('eventCause') }}: {{ eventLabel(run.result.event.type) }} · {{ date(run.result.event.observed_at) }}</small>
+            <small v-if="run.result.research_calls">{{ run.result.research_calls.length }} {{ t('calls') }} · {{ run.result.tool_request_count ?? (run.result.tool_trace || []).length }} {{ t('toolReads') }}</small>
             <p class="decision-summary">{{ run.result.summary || run.draft }}</p>
             <div v-for="(item, index) in run.result.items || []" :key="index" class="decision-item">
               <a-tag>{{ item.symbol }} · {{ item.action }}</a-tag>
@@ -104,6 +108,9 @@
           </article>
         </section>
         <section class="task-panel">
+          <h3>{{ t('evaluation') }}</h3>
+          <p v-if="dashboard.decision_stats">{{ t('recentWindow') }} · {{ dashboard.decision_stats.valid_model_decisions }} {{ t('validDecisions') }} · {{ dashboard.decision_stats.preview_decisions }} {{ t('previewLabel') }} · {{ dashboard.decision_stats.protective_runs }} {{ t('protectiveLabel') }}</p>
+          <p class="task-footnote">{{ t('evaluationHint') }}</p>
           <h3>{{ t('usage') }}</h3>
           <p>{{ dashboard.model_usage.recorded_calls }} {{ t('calls') }} · {{ dashboard.model_usage.total_tokens }} {{ t('tokens') }} · {{ dashboard.model_usage.unpriced_calls }} {{ t('unpriced') }}</p>
           <p v-for="(cost, unit) in dashboard.model_usage.estimated_cost_by_currency" :key="unit">{{ unit }} {{ cost.toFixed(6) }}</p>
@@ -131,18 +138,33 @@
         <a-form-model-item :label="t('symbols')"><a-input v-model="symbolsText" placeholder="AAPL, MSFT, NVDA" /></a-form-model-item>
         <a-form-model-item :label="t('brief')"><a-textarea v-model="form.config.brief" :rows="3" :max-length="4000" :placeholder="t('briefHint')" /></a-form-model-item>
         <div class="form-grid">
-          <a-form-model-item :label="t('template')"><a-select v-model="form.config.kind"><a-select-option value="daily_portfolio">{{ t('daily') }}</a-select-option><a-select-option value="price_trigger">{{ t('trigger') }}</a-select-option></a-select></a-form-model-item>
+          <a-form-model-item :label="t('template')"><a-select v-model="form.config.kind"><a-select-option value="daily_portfolio">{{ t('daily') }}</a-select-option><a-select-option value="price_trigger">{{ t('trigger') }}</a-select-option><a-select-option value="event_portfolio">{{ t('eventPortfolio') }}</a-select-option></a-select></a-form-model-item>
           <a-form-model-item :label="t('mode')"><a-select v-model="form.config.execution_mode"><a-select-option value="plan_only">{{ t('research') }}</a-select-option><a-select-option value="paper_auto">{{ t('paper') }}</a-select-option></a-select></a-form-model-item>
         </div>
         <div v-if="form.config.kind === 'daily_portfolio'" class="form-grid">
           <a-form-model-item :label="t('beforeOpen')"><a-input-number v-model="form.config.before_open_minutes" :min="5" :max="180" /></a-form-model-item>
           <a-form-model-item :label="t('afterOpen')"><a-input-number v-model="form.config.execute_after_open_minutes" :min="1" :max="30" /></a-form-model-item>
         </div>
-        <div v-else class="form-grid">
+        <div v-else-if="form.config.kind === 'price_trigger'" class="form-grid">
           <a-form-model-item :label="t('trigger')"><a-select v-model="form.config.trigger.type"><a-select-option value="price_above">{{ t('above') }}</a-select-option><a-select-option value="price_below">{{ t('below') }}</a-select-option></a-select></a-form-model-item>
           <a-form-model-item :label="t('price')"><a-input-number v-model="form.config.trigger.price" :min="0.0001" /></a-form-model-item>
           <a-form-model-item :label="t('cooldown')"><a-input-number v-model="form.config.cooldown_seconds" :min="30" :max="86400" /></a-form-model-item>
         </div>
+        <div v-if="form.config.kind === 'event_portfolio'" class="form-grid">
+          <a-form-model-item :label="t('eventMove')"><a-input-number v-model="eventMove" :min="0.1" :max="50" /></a-form-model-item>
+          <a-form-model-item :label="t('cooldown')"><a-input-number v-model="form.config.cooldown_seconds" :min="30" :max="86400" /></a-form-model-item>
+          <a-form-model-item><a-checkbox v-model="form.config.events.on_fill">{{ t('onFill') }}</a-checkbox></a-form-model-item>
+        </div>
+        <div class="form-grid">
+          <a-form-model-item v-if="form.config.kind !== 'price_trigger'" :label="t('researchMethod')"><a-select v-model="form.config.research.mode"><a-select-option value="snapshot">{{ t('snapshot') }}</a-select-option><a-select-option value="tool_loop">{{ t('toolLoop') }}</a-select-option></a-select></a-form-model-item>
+          <a-form-model-item :label="t('decisionsPerDay')"><a-input-number v-model="form.config.research.max_decisions_per_day" :min="1" :max="100" :precision="0" /></a-form-model-item>
+          <a-form-model-item :label="t('outputCap')"><a-input-number v-model="form.config.research.max_output_tokens" :min="700" :max="14000" :precision="0" /></a-form-model-item>
+          <template v-if="form.config.kind !== 'price_trigger' && form.config.research.mode === 'tool_loop'">
+            <a-form-model-item :label="t('modelCallCap')"><a-input-number v-model="form.config.research.max_model_calls" :min="1" :max="4" :precision="0" /></a-form-model-item>
+            <a-form-model-item :label="t('toolCallCap')"><a-input-number v-model="form.config.research.max_tool_requests" :min="1" :max="8" :precision="0" /></a-form-model-item>
+          </template>
+        </div>
+        <p class="task-footnote">{{ t('researchHint') }}</p>
         <div class="form-grid">
           <a-form-model-item :label="t('budget')"><a-input-number v-model="form.config.budget" :min="1" /></a-form-model-item>
           <a-form-model-item :label="t('weight')"><a-input-number v-model="weight" :min="1" :max="100" /></a-form-model-item>
@@ -168,7 +190,15 @@
     <a-modal v-model="detailVisible" :title="t('details')" :width="900" :footer="null">
       <template v-if="detail">
         <h3>{{ detail.result.summary || detail.phase }}</h3>
-        <pre>{{ JSON.stringify(detail.result, null, 2) }}</pre>
+        <a-collapse><a-collapse-panel key="decision" :header="t('rawDecision')"><pre>{{ JSON.stringify(detail.result, null, 2) }}</pre></a-collapse-panel></a-collapse>
+        <template v-if="detail.result.tool_trace && detail.result.tool_trace.length">
+          <h3>{{ t('toolTrace') }}</h3>
+          <article v-for="entry in detail.result.tool_trace" :key="entry.sequence" class="decision-row">
+            <strong>#{{ entry.sequence }} · {{ entry.request.tool }} · {{ date(entry.requested_at) }}</strong>
+            <pre>{{ JSON.stringify(entry.request.arguments, null, 2) }}</pre>
+            <pre>{{ JSON.stringify(entry.result, null, 2) }}</pre>
+          </article>
+        </template>
         <h3>{{ t('evidence') }}</h3><pre>{{ JSON.stringify(detail.evidence, null, 2) }}</pre>
       </template>
     </a-modal>
@@ -198,6 +228,8 @@ const defaults = () => ({
     execute_after_open_minutes: 5,
     cooldown_seconds: 300,
     manage_existing: false,
+    research: { mode: 'tool_loop', max_model_calls: 3, max_tool_requests: 6, max_output_tokens: 7000, max_decisions_per_day: 8 },
+    events: { price_move_pct: 0.02, on_fill: true },
     trigger: { type: 'price_above', price: 100 },
     risk: { enabled: true, stop_loss_pct: 0.08, max_daily_loss_pct: 0.03, max_drawdown_pct: 0.1 }
   }
@@ -224,6 +256,7 @@ export default {
       stopLoss: 8,
       dailyLoss: 3,
       maxDrawdown: 10,
+      eventMove: 2,
       modelKey: '',
       effort: 'default',
       detailVisible: false,
@@ -235,6 +268,7 @@ export default {
     }
   },
   computed: {
+    decisionQuota () { return this.dashboard && this.dashboard.task.decision_budget || {} },
     isDarkTheme () { return this.$store.getters.theme === 'dark' },
     currency () { return this.dashboard && this.dashboard.task.config.market === 'HKStock' ? 'HKD' : 'USD' },
     current () { return this.dashboard && this.dashboard.performance.latest || {} },
@@ -288,6 +322,7 @@ export default {
     if (this.chart) this.chart.dispose()
   },
   methods: {
+    eventLabel (type) { return this.t({ initial_observation: 'initialEvent', fills_changed: 'fillEvent', price_movement: 'moveEvent' }[type] || 'eventCause') },
     t (key) { return this.$t('agentTasks.' + key) },
     money (value) { return value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) },
     percent (value) { return value === null || value === undefined ? '—' : Number(value).toFixed(2) + '%' },
@@ -338,6 +373,8 @@ export default {
       if (task) {
         value.name = task.name
         value.config = { ...value.config, ...JSON.parse(JSON.stringify(task.config)) }
+        value.config.research = { ...defaults().config.research, mode: 'snapshot', ...(task.config.research || {}) }
+        value.config.events = { ...defaults().config.events, ...(task.config.events || {}) }
         if (!task.config.risk) value.config.risk.enabled = false
       }
       this.form = value
@@ -348,6 +385,7 @@ export default {
       this.stopLoss = c.risk.stop_loss_pct * 100
       this.dailyLoss = c.risk.max_daily_loss_pct * 100
       this.maxDrawdown = c.risk.max_drawdown_pct * 100
+      this.eventMove = c.events.price_move_pct * 100
       this.modelKey = c.llm_selection && c.llm_selection.provider ? `${c.llm_selection.provider}:${c.llm_selection.model}` : ''
       this.effort = c.llm_selection && c.llm_selection.reasoning_effort || 'default'
       this.editorVisible = true
@@ -360,6 +398,8 @@ export default {
       if (this.modelKey && !this.selectedModel) { this.$message.error(this.t('modelUnavailable')); return }
       const config = {
         ...this.form.config,
+        research: { ...this.form.config.research, mode: this.form.config.kind === 'price_trigger' ? 'snapshot' : this.form.config.research.mode },
+        events: { ...this.form.config.events, price_move_pct: this.eventMove / 100 },
         symbols: this.symbolsText.split(/[,，\s]+/).filter(Boolean),
         max_weight: this.weight / 100,
         reserve_ratio: this.reserve / 100,
@@ -384,6 +424,10 @@ export default {
     resizeChart () { if (this.chart) this.chart.resize() },
     drawChart () {
       if (!this.$refs.chart || !this.dashboard) return
+      if (!this.dashboard.series.length) {
+        if (this.chart) { this.chart.dispose(); this.chart = null }
+        return
+      }
       if (!this.chart) this.chart = echarts.init(this.$refs.chart)
       const color = this.isDarkTheme ? '#aeb8c8' : '#586477'
       const series = this.dashboard.series
