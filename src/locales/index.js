@@ -32,6 +32,7 @@ import researchExecutionMessages from './lang/research-execution'
 import polymarketMessages from './lang/polymarket'
 import quickTradeSpotSellMessages from './lang/quick-trade-spot-sell'
 import agentTradingIntentMessages from './lang/agent-trading-intents'
+import agentTaskMessages from './lang/agent-tasks'
 
 Vue.use(VueI18n)
 
@@ -40,6 +41,7 @@ export const defaultLang = 'en-US'
 const messages = {
   [defaultLang]: {
     ...enUS,
+    ...agentTaskMessages[defaultLang],
     ...(copilotOverrides[defaultLang] || {}),
     ...(profileSecurityMessages[defaultLang] || {}),
     ...(brokerAccountWorkspaceMessages[defaultLang] || {}),
@@ -136,6 +138,7 @@ function setI18nLanguage (lang) {
 
 function mergeLocaleOverrides (lang) {
   const overrides = {
+    ...(agentTaskMessages[lang] || agentTaskMessages[defaultLang]),
     ...(copilotOverrides[lang] || {}),
     ...(profileSecurityMessages[lang] || {}),
     ...(brokerAccountWorkspaceMessages[lang] || {}),

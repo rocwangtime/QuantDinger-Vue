@@ -48,6 +48,13 @@ export const asyncRouterMap = [
         component: () => import('@/views/polymarket'),
         meta: { title: 'polymarket.title', keepAlive: false, icon: 'swap', permission: ['dashboard'] }
       },
+      // Persistent Agent paper portfolio tasks.
+      {
+        path: '/agent-tasks',
+        name: 'AgentTasks',
+        component: () => import('@/views/agent-tasks'),
+        meta: { title: 'agentTasks.title', keepAlive: false, icon: 'robot', permission: ['dashboard'] }
+      },
       // Indicator marketplace.
       {
         path: '/indicator-community',
