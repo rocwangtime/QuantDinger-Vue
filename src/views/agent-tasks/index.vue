@@ -24,8 +24,8 @@
             <div><h2>{{ dashboard.task.name }}</h2><p>{{ dashboard.task.monitor_status }}</p></div>
             <div class="task-actions">
               <a-button :disabled="dashboard.task.active || busy" @click="openEditor(dashboard.task)">{{ t('edit') }}</a-button>
-              <a-button :loading="busy" @click="preview">{{ t('preview') }}</a-button>
-              <a-button :type="dashboard.task.active ? 'default' : 'primary'" :loading="busy" @click="toggleActive">{{ dashboard.task.active ? t('pause') : t('start') }}</a-button>
+              <a-button :loading="busy" :disabled="busy || decisionQuota.remaining === 0 || readiness && !readiness.model.configured" @click="preview">{{ t('preview') }}</a-button>
+              <a-button :type="dashboard.task.active ? 'default' : 'primary'" :loading="busy" :disabled="!dashboard.task.active && readiness && !readiness.configuration_ready" @click="toggleActive">{{ dashboard.task.active ? t('pause') : t('start') }}</a-button>
             </div>
           </div>
           <p class="mandate">{{ dashboard.task.config.brief || t('briefHint') }}</p>
@@ -45,6 +45,35 @@
               </a-tooltip>
             </div>
           </a-alert>
+        </section>
+        <section class="task-panel">
+          <div class="task-heading">
+            <h3>{{ t('readiness') }}</h3>
+            <div class="task-actions">
+              <a-button :loading="checking" :disabled="busy" @click="probeConnection">{{ t('connectionProbe') }}</a-button>
+              <a-button :disabled="busy || checking" @click="loadReadiness(true)">{{ t('refreshChecks') }}</a-button>
+            </div>
+          </div>
+          <p v-if="readinessError" class="task-footnote">{{ readinessError }}</p>
+          <p v-if="readiness" class="task-footnote">{{ t('checksAt') }} {{ date(readiness.checked_at) }}</p>
+          <div v-for="check in readiness && readiness.checks || []" :key="check.key" class="diagnostic-row">
+            <a-tag :color="check.status === 'pass' ? 'green' : check.status === 'blocked' ? 'red' : check.status === 'wait' ? 'orange' : undefined">{{ t('checkStatus_' + check.status) }}</a-tag>
+            <span>{{ diagnosticLabel(check.code) }}</span>
+            <small v-if="check.expires_at">{{ t('authorizationExpires') }} {{ date(check.expires_at) }}</small>
+            <small v-if="check.missing_symbols && check.missing_symbols.length">{{ check.missing_symbols.join(', ') }}</small>
+          </div>
+          <p v-if="readiness && readiness.account_limits" class="task-footnote">{{ t('accountLimits') }}: {{ money(readiness.account_limits.remaining_notional) }} {{ currency }} · {{ readiness.account_limits.remaining_orders }} {{ t('remainingOrders') }} · {{ t('accountLimitBasis') }}</p>
+          <p class="task-footnote">{{ t('readinessHint') }}</p>
+        </section>
+        <section class="task-panel">
+          <div class="task-heading">
+            <h3>{{ t('runReport') }}</h3>
+            <div class="task-actions">
+              <a-select v-model="reviewDays" style="width: 110px"><a-select-option v-for="days in [7, 14, 30, 90]" :key="days" :value="days">{{ days }} {{ t('days') }}</a-select-option></a-select>
+              <a-button :loading="reviewLoading" @click="openReview">{{ t('generateReview') }}</a-button>
+            </div>
+          </div>
+          <p class="task-footnote">{{ t('reportHint') }}</p>
         </section>
         <section class="metrics">
           <div v-for="metric in metrics" :key="metric.key" class="task-panel"><span>{{ t(metric.key) }}</span><strong>{{ metric.value }}</strong></div>
@@ -187,6 +216,29 @@
         <a-alert type="info" show-icon :message="t('authorizationHint')" />
       </a-form-model>
     </a-modal>
+    <a-modal v-model="reviewVisible" :title="t('runReport')" :width="900" :footer="null">
+      <template v-if="reviewReport">
+        <h3>{{ reviewReport.task.name }}</h3>
+        <a-alert v-if="reviewReport.coverage.partial" type="warning" show-icon :message="t('partialReport')" />
+        <p>{{ date(reviewReport.window.since, reviewReport.window.timezone) }} – {{ date(reviewReport.window.until, reviewReport.window.timezone) }} · {{ reviewReport.window.timezone }}</p>
+        <p>{{ reviewReport.coverage.run_rows }} {{ t('reportRuns') }} · {{ reviewReport.coverage.sample_rows }} {{ t('reportSamples') }} · {{ reviewReport.observed_sessions.length }} {{ t('observedDays') }}</p>
+        <p>{{ reviewReport.decisions.valid_model_decisions }} {{ t('validDecisions') }} · {{ reviewReport.decisions.previews }} {{ t('previewLabel') }} · {{ reviewReport.decisions.protective_runs }} {{ t('protectiveLabel') }}</p>
+        <a-table
+          :columns="reviewColumns"
+          :data-source="reviewReport.observed_sessions"
+          row-key="day"
+          :pagination="{ pageSize: 7 }"
+          :scroll="{ x: 700 }"
+          size="small">
+          <template slot="numeric" slot-scope="value">{{ money(value) }}</template>
+          <template slot="percent" slot-scope="value">{{ percent(value) }}</template>
+          <template slot="date" slot-scope="value">{{ date(value, reviewReport.window.timezone) }}</template>
+        </a-table>
+        <p class="task-footnote">{{ t('observedChangeHint') }}</p>
+        <p class="task-footnote">{{ t('reportUsageHint') }}</p>
+        <a-button type="primary" @click="downloadReview">{{ t('downloadReview') }}</a-button>
+      </template>
+    </a-modal>
     <a-modal v-model="detailVisible" :title="t('details')" :width="900" :footer="null">
       <template v-if="detail">
         <h3>{{ detail.result.summary || detail.phase }}</h3>
@@ -207,7 +259,7 @@
 
 <script>
 import * as echarts from 'echarts'
-import { listTasks, getDashboard, getRun, saveTask, setTaskActive, previewTask, cancelRun, resetTaskRisk, getModels } from '@/api/automations'
+import { listTasks, getDashboard, getRun, saveTask, setTaskActive, previewTask, cancelRun, resetTaskRisk, getModels, getReadiness, checkConnection, getReview } from '@/api/automations'
 import { listExchangeCredentials } from '@/api/credentials'
 
 const defaults = () => ({
@@ -242,6 +294,15 @@ export default {
       tasks: [],
       selectedId: null,
       dashboard: null,
+      readiness: null,
+      readinessError: '',
+      lastReadinessAt: 0,
+      readinessTaskId: null,
+      checking: false,
+      reviewDays: 14,
+      reviewReport: null,
+      reviewLoading: false,
+      reviewVisible: false,
       accounts: [],
       models: [],
       loading: false,
@@ -302,6 +363,7 @@ export default {
         { key: 'fills', value: this.report.filled_order_count ?? '—' }
       ]
     },
+    reviewColumns () { return this.columns([['day', 'observationDay'], ['samples', 'observationCount'], ['first_equity', 'firstEquity', 'numeric'], ['last_equity', 'lastEquity', 'numeric'], ['observed_change_pct', 'observedChange', 'percent'], ['last_mark_at', 'lastMark', 'date']]) },
     positionColumns () { return this.columns([['symbol', 'symbol'], ['quantity', 'quantity'], ['average_cost', 'cost', 'numeric'], ['price', 'mark', 'numeric'], ['unrealized_pnl', 'unrealized', 'numeric']]) },
     orderColumns () { return this.columns([['order_spec', 'symbol', 'symbol'], ['side', 'side', 'side'], ['status', 'status'], ['filled_qty', 'filled', 'numeric'], ['avg_fill_price', 'fillPrice', 'numeric'], ['updated_at', 'time', 'date']]) }
   },
@@ -326,7 +388,7 @@ export default {
     t (key) { return this.$t('agentTasks.' + key) },
     money (value) { return value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) },
     percent (value) { return value === null || value === undefined ? '—' : Number(value).toFixed(2) + '%' },
-    date (value) { if (!value) return '—'; const date = new Date(typeof value === 'number' ? value * 1000 : value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString() },
+    date (value, zone) { if (!value) return '—'; const date = new Date(typeof value === 'number' ? value * 1000 : value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(undefined, zone ? { timeZone: zone } : undefined) },
     columns (items) { return items.map(([dataIndex, key, slot]) => ({ title: this.t(key), dataIndex, key, ...(slot ? { scopedSlots: { customRender: slot } } : {}) })) },
     async refresh () {
       this.loading = true
@@ -341,6 +403,12 @@ export default {
       if (this.chart) { this.chart.dispose(); this.chart = null }
       this.selectedId = id
       this.dashboard = null
+      this.readiness = null
+      this.readinessError = ''
+      this.lastReadinessAt = 0
+      this.readinessTaskId = null
+      this.reviewReport = null
+      this.reviewVisible = false
       try { await this.loadDashboard(); this.error = '' } catch (e) { this.error = e.message || this.t('error') }
     },
     async loadDashboard () {
@@ -352,11 +420,62 @@ export default {
       this.tasks = this.tasks.map(t => t.id === id ? value.task : t)
       await this.$nextTick()
       this.drawChart()
+      await this.loadReadiness()
     },
     async poll () {
       if (this.polling || this.loading || document.hidden) return
       this.polling = true
       try { await this.loadDashboard(); this.error = '' } catch (e) { this.error = this.t('error') } finally { this.polling = false }
+    },
+    diagnosticLabel (code) {
+      const key = 'agentTasks.check_' + code
+      const translated = this.$t(key)
+      return translated === key ? code : translated
+    },
+    async loadReadiness (force = false) {
+      const id = this.selectedId
+      if (!id) return
+      const cacheMatches = this.readinessTaskId === id && this.readiness && this.dashboard && this.readiness.task_revision === this.dashboard.task.revision
+      if (!force && cacheMatches && Date.now() - this.lastReadinessAt < 15000) return
+      if (!cacheMatches) this.readiness = null
+      try {
+        const result = await getReadiness(id)
+        if (this.disposed || id !== this.selectedId || !this.dashboard || result.task_revision !== this.dashboard.task.revision) return
+        this.readiness = result
+        this.lastReadinessAt = Date.now()
+        this.readinessTaskId = id
+        this.readinessError = ''
+      } catch (e) { if (id === this.selectedId) this.readinessError = e.message || this.t('checksFailed') }
+    },
+    async probeConnection () {
+      if (this.checking) return
+      const id = this.selectedId
+      this.checking = true
+      try {
+        await checkConnection(id)
+        if (id === this.selectedId && !this.disposed) await this.loadReadiness(true)
+      } catch (e) { this.$message.error(e.message || this.t('checksFailed')) } finally { this.checking = false }
+    },
+    async openReview () {
+      const id = this.selectedId
+      this.reviewLoading = true
+      try {
+        const report = await getReview(id, this.reviewDays)
+        if (id !== this.selectedId || this.disposed) return
+        this.reviewReport = report
+        this.reviewVisible = true
+      } catch (e) { this.$message.error(e.message || this.t('checksFailed')) } finally { this.reviewLoading = false }
+    },
+    downloadReview () {
+      if (!this.reviewReport) return
+      const url = URL.createObjectURL(new Blob([JSON.stringify(this.reviewReport, null, 2)], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `agent-paper-review-${this.reviewReport.task.id}-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     },
     async action (fn) {
       if (this.busy) return
@@ -471,6 +590,7 @@ p { margin: 0 0 12px; } .task-header p, .task-meta, .task-footnote, small { colo
 .mandate { white-space: pre-wrap; line-height: 1.7; } .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .metrics .task-panel { padding: 18px; } .metrics span { font-size: 12px; color: var(--muted); } .metrics strong { display: block; font-size: 23px; margin-top: 8px; }
 .equity-chart { height: 280px; width: 100%; } .task-footnote { font-size: 12px; line-height: 1.7; margin-top: 12px; }
+.diagnostic-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 7px 0; }
 .decision-row { padding: 18px 0; border-bottom: 1px solid var(--line); } .decision-row:last-child { border-bottom: 0; }
 .decision-summary { white-space: pre-wrap; line-height: 1.7; } .decision-item { padding: 6px 0; } .decision-item small { display: block; margin-top: 6px; }
 .task-notice { margin-bottom: 16px; } .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }

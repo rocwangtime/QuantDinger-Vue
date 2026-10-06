@@ -15,3 +15,7 @@ export const previewTask = id => request({ url: `${base}/${id}/preview`, method:
 export const cancelRun = id => request({ url: `${base}/runs/${id}/cancel`, method: 'post' }).then(dataOf)
 export const resetTaskRisk = id => request({ url: `${base}/${id}/risk/reset`, method: 'post' }).then(dataOf)
 export const getModels = () => request({ url: '/api/ai/agent/models' }).then(dataOf)
+
+export const getReadiness = id => request({ url: `${base}/${id}/readiness` }).then(dataOf)
+export const checkConnection = id => request({ url: `${base}/${id}/check-connection`, method: 'post', timeout: 60000 }).then(dataOf)
+export const getReview = (id, days) => request({ url: `${base}/${id}/review`, params: { days } }).then(dataOf)
