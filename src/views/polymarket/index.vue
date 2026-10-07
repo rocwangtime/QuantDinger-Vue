@@ -301,5 +301,7 @@ export default {
 .theme-dark .lab-card { background: #182132; border-color: #2b374c; }
 .theme-dark .metrics div { background: #202d42; }
 .theme-dark h1, .theme-dark h3, .theme-dark h4 { color: #edf3ff; }
+.theme-dark ::v-deep .ant-descriptions-item-content { color: #dbe4f2; background: #182132; }
+.theme-dark ::v-deep .ant-descriptions-item-label { color: #dbe4f2; background: #202d42; }
 @media (max-width: 600px) { .polymarket-lab { padding: 12px; } .lab-card { padding: 14px; } }
 </style>
