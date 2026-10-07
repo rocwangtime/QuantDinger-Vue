@@ -624,6 +624,14 @@ export default {
           singleAsItem: true
         },
         {
+          name: 'MenuGroupPolymarket',
+          path: '/menu-group/polymarket',
+          title: this.$t('polymarket.title'),
+          icon: 'swap',
+          paths: ['/polymarket'],
+          singleAsItem: true
+        },
+        {
           name: 'MenuGroupTrading',
           path: '/menu-group/auto-trading',
           title: this.$t('menu.dashboard.brokerAccounts') || 'Broker Accounts',
