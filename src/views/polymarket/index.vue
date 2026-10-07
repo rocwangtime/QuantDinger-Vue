@@ -5,6 +5,43 @@
       <a-tag color="blue">{{ $t('polymarket.scope') }}</a-tag>
     </header>
     <a-alert type="info" show-icon :message="$t('polymarket.scopeHint')" />
+    <section class="lab-card lab-onboarding">
+      <h3>{{ $t('polymarket.fundsTitle') }}</h3>
+      <div class="account-grid">
+        <div class="account-fact">
+          <span>{{ $t('polymarket.executionMode') }}</span>
+          <strong><a-icon type="experiment" /> {{ $t('polymarket.paperOnly') }}</strong>
+          <p>{{ $t('polymarket.paperModeHint') }}</p>
+        </div>
+        <div class="account-fact">
+          <span>{{ $t('polymarket.tradingWallet') }}</span>
+          <strong><a-icon type="wallet" /> {{ $t('polymarket.walletUnavailable') }}</strong>
+          <p>{{ $t('polymarket.walletHint') }}</p>
+        </div>
+        <div class="account-fact">
+          <span>{{ $t('polymarket.runBudget') }}</span>
+          <strong>{{ formatNumber(settings.budget) }} {{ $t('polymarket.virtualPusd') }}</strong>
+          <p>{{ $t('polymarket.budgetHint') }}</p>
+        </div>
+      </div>
+      <p class="currency-note">{{ $t('polymarket.currencyHint') }} <a href="https://docs.polymarket.com/concepts/pusd" target="_blank" rel="noopener noreferrer">{{ $t('polymarket.currencyDocs') }} <a-icon type="export" /></a></p>
+      <a-collapse :bordered="false" class="lab-guide">
+        <a-collapse-panel key="guide" :header="$t('polymarket.guideTitle')">
+          <h4>{{ $t('polymarket.logicTitle') }}</h4>
+          <p>{{ $t('polymarket.logicHint') }}</p>
+          <div class="arbitrage-formula">{{ $t('polymarket.formula') }}</div>
+          <p>{{ $t('polymarket.example') }}</p>
+          <ol class="guide-steps">
+            <li><strong>{{ $t('polymarket.stepScan') }}</strong><p>{{ $t('polymarket.stepScanHint') }}</p></li>
+            <li><strong>{{ $t('polymarket.stepPaper') }}</strong><p>{{ $t('polymarket.stepPaperHint') }}</p></li>
+            <li><strong>{{ $t('polymarket.stepReview') }}</strong><p>{{ $t('polymarket.stepReviewHint') }}</p></li>
+          </ol>
+          <p class="hint">{{ $t('polymarket.noOpportunityHint') }}</p>
+          <p class="hint">{{ $t('polymarket.liveRequirements') }}</p>
+          <a href="https://docs.polymarket.com/trading/positions/manage" target="_blank" rel="noopener noreferrer">{{ $t('polymarket.mergeDocs') }} <a-icon type="export" /></a>
+        </a-collapse-panel>
+      </a-collapse>
+    </section>
     <a-alert
       v-if="error"
       type="error"
@@ -286,6 +323,17 @@ export default {
 .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
 .settings-grid label, .market-input { display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
 .settings-grid .ant-input-number, .settings-grid .ant-select { width: 100%; }
+.account-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.account-fact { padding: 14px; border-radius: 8px; background: #f5f8fc; }
+.account-fact > span { display: block; color: #748198; font-size: 12px; }
+.account-fact strong { display: block; font-size: 17px; margin: 7px 0; }
+.account-fact p { margin: 0; font-size: 12px; line-height: 1.7; }
+.currency-note { font-size: 13px; line-height: 1.8; margin: 14px 0 8px; }
+.lab-guide p { line-height: 1.8; }
+.arbitrage-formula { padding: 12px; border-radius: 8px; background: #f0f8ee; font-weight: 600; margin: 12px 0; }
+.guide-steps { padding-left: 20px; }
+.guide-steps li { padding-left: 4px; margin-top: 12px; }
+.guide-steps p { margin: 5px 0 0; }
 .market-input, .assumptions, .hint { margin-top: 16px; }
 .toolbar { justify-content: flex-start; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
@@ -300,8 +348,14 @@ export default {
 .theme-dark { color: #dbe4f2; }
 .theme-dark .lab-card { background: #182132; border-color: #2b374c; }
 .theme-dark .metrics div { background: #202d42; }
+.theme-dark .account-fact { background: #202d42; }
+.theme-dark .arbitrage-formula { background: #20352d; }
+.theme-dark ::v-deep .ant-collapse { background: #202d42; }
+.theme-dark ::v-deep .ant-collapse-header { color: #dbe4f2 !important; }
+.theme-dark ::v-deep .ant-collapse-content { background: #182132; color: #dbe4f2; border-color: #2b374c; }
 .theme-dark h1, .theme-dark h3, .theme-dark h4 { color: #edf3ff; }
 .theme-dark ::v-deep .ant-descriptions-item-content { color: #dbe4f2; background: #182132; }
 .theme-dark ::v-deep .ant-descriptions-item-label { color: #dbe4f2; background: #202d42; }
+@media (max-width: 900px) { .account-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .polymarket-lab { padding: 12px; } .lab-card { padding: 14px; } }
 </style>
