@@ -41,6 +41,13 @@ export const asyncRouterMap = [
         component: () => import('@/views/strategy-center'),
         meta: { title: 'menu.dashboard.strategyCenter', keepAlive: true, icon: 'cluster', permission: ['dashboard'] }
       },
+      // Public prediction-market observation and paper execution.
+      {
+        path: '/polymarket',
+        name: 'PolymarketLab',
+        component: () => import('@/views/polymarket'),
+        meta: { title: 'polymarket.title', keepAlive: false, icon: 'swap', permission: ['dashboard'] }
+      },
       // Indicator marketplace.
       {
         path: '/indicator-community',

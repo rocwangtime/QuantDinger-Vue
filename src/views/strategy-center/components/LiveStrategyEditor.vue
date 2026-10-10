@@ -334,6 +334,8 @@
             </div>
           </transition>
 
+          <research-deployment-controls v-model="model.research" :ai-enabled="model.aiDecisionFilter && supportsAiDecisionFilter" />
+
           <div class="execution-panel execution-panel--notifications">
             <div class="execution-panel__head">
               <span class="execution-panel__index">{{ model.executionMode === 'live' ? 3 : 2 }}</span>
@@ -397,6 +399,9 @@ import {
   strategyParameterOptions
 } from '@/utils/strategyParameterPresentation'
 import { ratioPercentInputFormatter, ratioPercentInputParser } from '@/utils/numberFormat'
+
+import ResearchDeploymentControls from './ResearchDeploymentControls.vue'
+import { researchDeployment } from '@/utils/researchExecution'
 
 const DEFAULT_CHANNELS = ['browser', 'email']
 const RUNTIME_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', '4H', '1D', '1W']
@@ -472,6 +477,7 @@ const notificationTargets = settings => ({
 
 export default {
   name: 'LiveStrategyEditor',
+  components: { ResearchDeploymentControls },
   props: {
     visible: { type: Boolean, default: false },
     mode: { type: String, default: 'create' },
@@ -739,6 +745,7 @@ export default {
         disclaimer: false,
         notifyChannels: [...DEFAULT_CHANNELS],
         aiDecisionFilter: false,
+        research: { aiDecisionMode: 'advisory', researchEvidenceJobId: '', riskEnabled: false, riskModel: {}, maximumVolatility: 3, maximumAge: 96 },
         templateParams: {}
       }
     },
@@ -866,6 +873,14 @@ export default {
         disclaimer: strategy.execution_mode === 'live',
         notifyChannels: (strategy.notification_config && strategy.notification_config.channels) || [...DEFAULT_CHANNELS],
         aiDecisionFilter: Boolean(config.ai_decision_filter),
+        research: {
+          aiDecisionMode: config.ai_decision_mode || 'advisory',
+          researchEvidenceJobId: config.research_evidence_job_id || '',
+          riskEnabled: Boolean(config.portfolio_risk && config.portfolio_risk.portfolio_model),
+          riskModel: (config.portfolio_risk || {}).portfolio_model || {},
+          maximumVolatility: Number((config.portfolio_risk || {}).max_portfolio_daily_volatility || 0.03) * 100,
+          maximumAge: Number((config.portfolio_risk || {}).portfolio_model_max_age_hours || 96)
+        },
         templateParams: { ...this.parseObject(config.params) }
       }
       await this.loadSourceDetail(this.model.scriptSourceId, false)
@@ -1240,6 +1255,7 @@ export default {
       this.saving = true
       try {
         const payload = {
+          ...researchDeployment(this.model.research),
           sourceId: Number(this.model.scriptSourceId),
           name: this.model.name,
           initialCapital: Number(this.model.initialCapital),
@@ -1264,7 +1280,7 @@ export default {
           mode: this.isEdit ? 'edit' : 'create'
         })
       } catch (error) {
-        this.$message.error(error.backendMessage || error.message || this.$t(this.isEdit ? 'trading-assistant.messages.updateFailed' : 'trading-assistant.messages.createFailed'))
+        this.$message.error(error.message === 'researchExecution.invalidRiskModel' ? this.$t(error.message) : error.backendMessage || error.message || this.$t(this.isEdit ? 'trading-assistant.messages.updateFailed' : 'trading-assistant.messages.createFailed'))
       } finally {
         this.saving = false
       }

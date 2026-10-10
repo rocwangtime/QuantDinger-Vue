@@ -16,11 +16,11 @@
         </a-menu-item>
       </a-menu>
     </a-dropdown>
-    <span class="account-credits" @click.stop="handleCredits">
+    <span v-if="!personalWorkspace" class="account-credits" @click.stop="handleCredits">
       <a-icon type="wallet" />
       <strong>{{ formattedCredits }}</strong>
     </span>
-    <a-button size="small" type="primary" class="account-recharge" @click.stop="handleBilling">
+    <a-button v-if="!personalWorkspace" size="small" type="primary" class="account-recharge" @click.stop="handleBilling">
       <span>{{ $t('profile.credits.rechargeShort') || '充值' }}</span>
     </a-button>
   </span>
@@ -32,6 +32,7 @@
 <script>
 import { Modal } from 'ant-design-vue'
 import { getMembershipPlans } from '@/api/billing'
+import { PERSONAL_WORKSPACE } from '@/config/workspace.mjs'
 
 export default {
   name: 'AvatarDropdown',
@@ -47,6 +48,7 @@ export default {
   },
   data () {
     return {
+      personalWorkspace: PERSONAL_WORKSPACE,
       credits: null,
       creditsLoading: false,
       creditsRefreshTimer: null,
@@ -70,6 +72,7 @@ export default {
     }
   },
   mounted () {
+    if (this.personalWorkspace) return
     this.loadCredits(true)
     this.$root.$on('credits-updated', this.handleCreditsUpdated)
     window.addEventListener('focus', this.handleWindowFocus)
@@ -103,6 +106,7 @@ export default {
       if (document.visibilityState === 'visible') this.loadCredits(true)
     },
     async loadCredits (force = false) {
+      if (this.personalWorkspace) return
       if (this.creditsLoading) return
       if (!force && Date.now() - this.lastCreditsLoadAt < 10 * 1000) return
       this.creditsLoading = true

@@ -1,5 +1,5 @@
 <template>
-  <div :class="['basic-layout-wrapper', settings.theme, { 'basic-layout-wrapper--multi-tab': multiTab }]">
+  <div :class="['basic-layout-wrapper', settings.theme, { 'basic-layout-wrapper--multi-tab': multiTab, 'personal-workspace': personalWorkspace }]">
     <pro-layout
       :menus="menus"
       :collapsed="collapsed"
@@ -18,10 +18,11 @@
         </div>
       </template>
       <template #headerContentRender>
-        <div>
+        <div class="layout-page-heading">
           <a-tooltip :title="$t('menu.header.refreshPage')">
             <a-icon type="reload" style="font-size: 18px;cursor: pointer;" @click="handleRefresh" />
           </a-tooltip>
+          <span v-if="personalWorkspace" class="layout-page-title">{{ i18nRender($route.meta.title) }}</span>
         </div>
       </template>
 
@@ -233,6 +234,7 @@ import {
 } from '@/store/mutation-types'
 
 import defaultSettings from '@/config/defaultSettings'
+import { PERSONAL_WORKSPACE, workspaceMenuRoutes } from '@/config/workspace.mjs'
 import RightContent from '@/components/GlobalHeader/RightContent'
 import SettingDrawer from '@/components/SettingDrawer/SettingDrawer'
 import MultiTab from '@/components/MultiTab'
@@ -262,9 +264,10 @@ export default {
 
       // base - menus moved to computed property
       collapsed: false,
+      personalWorkspace: PERSONAL_WORKSPACE,
       title: defaultSettings.title,
       settings: {
-        layout: defaultSettings.layout, // 'sidemenu', 'topmenu'
+        layout: this.$store.state.app.layout || defaultSettings.layout,
         // CONTENT_WIDTH_TYPE
         contentWidth: defaultSettings.layout === 'sidemenu' ? CONTENT_WIDTH_TYPE.Fluid : defaultSettings.contentWidth,
         theme: defaultSettings.navTheme,
@@ -295,7 +298,7 @@ export default {
     }),
     menus () {
       const routes = this.mainMenu.find(item => item.path === '/')
-      const children = (routes && routes.children) || []
+      const children = workspaceMenuRoutes((routes && routes.children) || [])
       if (this.settings.layout !== 'topmenu') {
         return children
       }
@@ -307,6 +310,7 @@ export default {
         : (this.settings.theme === 'dark' ? 'dark' : 'light')
       return {
         ...this.settings,
+        siderWidth: this.personalWorkspace ? 248 : 208,
         theme
       }
     },
@@ -624,6 +628,14 @@ export default {
           singleAsItem: true
         },
         {
+          name: 'MenuGroupPolymarket',
+          path: '/menu-group/polymarket',
+          title: this.$t('polymarket.title'),
+          icon: 'swap',
+          paths: ['/polymarket'],
+          singleAsItem: true
+        },
+        {
           name: 'MenuGroupTrading',
           path: '/menu-group/auto-trading',
           title: this.$t('menu.dashboard.brokerAccounts') || 'Broker Accounts',
@@ -710,7 +722,7 @@ export default {
     findProfileMenuItem (root) {
       const routes = this.mainMenu.find(item => item.path === '/')
       const children = (routes && routes.children) || []
-      const visibleRoutes = children.filter(route => !route.hidden)
+      const visibleRoutes = workspaceMenuRoutes(children).filter(route => !route.hidden)
       const profileIndex = visibleRoutes.findIndex(route => route.path === '/profile')
       const items = root.querySelectorAll('li.ant-menu-item:not(.sidebar-admin-divider)')
       if (profileIndex >= 0 && items[profileIndex]) {
@@ -917,6 +929,22 @@ export default {
 </script>
 
 <style lang="less">
+.personal-workspace {
+  --menu-footer-height: 0px;
+
+  .layout-page-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .layout-page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+  .ant-layout-sider-children { height: 100% !important; padding-bottom: 12px !important; }
+  .ant-layout-sider .ant-menu-item { height: 36px !important; line-height: 36px !important; margin: 2px 0 !important; }
+  .ant-layout-sider .ant-layout-sider-children .ant-menu-root { height: calc(100vh - 76px) !important; max-height: calc(100vh - 76px); overflow-y: auto !important; }
+  &.light .ant-layout-sider,
+  &.light .ant-layout-sider .ant-layout-sider-children,
+  &.light .ant-layout-sider .ant-menu-light { background: #fff !important; }
+}
+@media (max-width: 767px) {
+  .personal-workspace .layout-page-title { display: none; }
+}
+
 @import "./BasicLayout.less";
 
 .sidebar-logo-wrapper {
@@ -985,9 +1013,6 @@ export default {
   }
 }
 
-.ant-pro-sider-menu-sider.light .ant-menu-light {
-  height: 60vh!important;
-}
 .basic-layout-wrapper {
   .ant-layout-footer {
     display: none !important;

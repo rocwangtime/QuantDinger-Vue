@@ -11,15 +11,14 @@ import {
 } from '@/store/mutation-types'
 import { printANSI } from '@/utils/screenLog'
 import defaultSettings from '@/config/defaultSettings'
+import { resolveWorkspaceLayout, PERSONAL_WORKSPACE } from '@/config/workspace.mjs'
 
 export default function Initializer () {
   printANSI() // 请自行移除该行.  please remove this line
 
   const legacyDefaultColor = '#13C2C2'
   const savedLayout = storage.get(TOGGLE_LAYOUT, defaultSettings.layout)
-  const nextLayout = defaultSettings.layout === 'topmenu' && savedLayout === 'sidemenu'
-    ? defaultSettings.layout
-    : savedLayout
+  const nextLayout = resolveWorkspaceLayout(savedLayout)
   const savedTheme = storage.get(TOGGLE_NAV_THEME)
   const savedColor = storage.get(TOGGLE_COLOR)
   const validThemes = ['light', 'dark', 'realdark']
@@ -27,7 +26,7 @@ export default function Initializer () {
   const nextColor = !savedColor || String(savedColor).toUpperCase() === legacyDefaultColor ? defaultSettings.primaryColor : savedColor
   store.commit(TOGGLE_LAYOUT, nextLayout)
   store.commit(TOGGLE_FIXED_HEADER, storage.get(TOGGLE_FIXED_HEADER, defaultSettings.fixedHeader))
-  store.commit(TOGGLE_FIXED_SIDEBAR, storage.get(TOGGLE_FIXED_SIDEBAR, defaultSettings.fixSiderbar))
+  store.commit(TOGGLE_FIXED_SIDEBAR, PERSONAL_WORKSPACE || storage.get(TOGGLE_FIXED_SIDEBAR, defaultSettings.fixSiderbar))
   const savedContentWidth = storage.get(TOGGLE_CONTENT_WIDTH, defaultSettings.contentWidth)
   store.commit(TOGGLE_CONTENT_WIDTH, nextLayout === 'topmenu' ? defaultSettings.contentWidth : savedContentWidth)
   store.commit(TOGGLE_HIDE_HEADER, storage.get(TOGGLE_HIDE_HEADER, defaultSettings.autoHideHeader))

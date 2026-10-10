@@ -28,6 +28,8 @@ import strategyBuilderOverrides from './strategy-builder-overrides'
 import eventRadarMessages from './lang/event-radar'
 import currentFeatureOverrides from './lang/current-feature-overrides'
 import strategyEvolutionMessages from './lang/strategy-evolution'
+import researchExecutionMessages from './lang/research-execution'
+import polymarketMessages from './lang/polymarket'
 import quickTradeSpotSellMessages from './lang/quick-trade-spot-sell'
 import agentTradingIntentMessages from './lang/agent-trading-intents'
 
@@ -63,6 +65,8 @@ const messages = {
     ...(currentFeatureOverrides[defaultLang] || {}),
     ...(eventRadarMessages[defaultLang] || {}),
     ...(strategyEvolutionMessages[defaultLang] || {}),
+    ...(researchExecutionMessages[defaultLang] || {}),
+    ...(polymarketMessages[defaultLang] || {}),
     ...(quickTradeSpotSellMessages[defaultLang] || {}),
     ...(agentTradingIntentMessages[defaultLang] || {})
   }
@@ -157,6 +161,8 @@ function mergeLocaleOverrides (lang) {
     ...(currentFeatureOverrides[lang] || {}),
     ...(eventRadarMessages[lang] || {}),
     ...(strategyEvolutionMessages[lang] || {}),
+    ...(researchExecutionMessages[lang] || {}),
+    ...(polymarketMessages[lang] || {}),
     ...(quickTradeSpotSellMessages[lang] || {}),
     ...(agentTradingIntentMessages[lang] || {})
   }

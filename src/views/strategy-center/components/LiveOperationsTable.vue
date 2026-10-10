@@ -283,6 +283,12 @@
               :is-dark="dark"
             />
           </a-tab-pane>
+          <a-tab-pane key="portfolio-risk" :tab="$t('researchExecution.riskTitle')">
+            <portfolio-risk-analysis v-if="detailTab === 'portfolio-risk'" />
+          </a-tab-pane>
+          <a-tab-pane v-if="selectedStrategy.execution_mode === 'signal'" key="order-groups" :tab="$t('researchExecution.groupTitle')">
+            <virtual-order-groups v-if="detailTab === 'order-groups'" :strategy="selectedStrategy" />
+          </a-tab-pane>
           <a-tab-pane key="review" :tab="$t('trading-assistant.tabs.aiReview')">
             <strategy-review-report
               v-if="detailTab === 'review'"
@@ -311,6 +317,8 @@ import StrategyReviewReport from './StrategyReviewReport.vue'
 import StrategyLogs from './StrategyLogs.vue'
 import GridRestingOrders from './GridRestingOrders.vue'
 import AiDecisionRecords from './AiDecisionRecords.vue'
+import PortfolioRiskAnalysis from './PortfolioRiskAnalysis.vue'
+import VirtualOrderGroups from './VirtualOrderGroups.vue'
 import { getExchangeDisplayName } from '@/utils/exchangeCredential'
 import {
   normalizeTimestampMilliseconds,
@@ -326,7 +334,7 @@ import {
 
 export default {
   name: 'LiveOperationsTable',
-  components: { PositionRecords, TradingRecords, StrategyReviewReport, StrategyLogs, GridRestingOrders, AiDecisionRecords },
+  components: { PositionRecords, TradingRecords, StrategyReviewReport, StrategyLogs, GridRestingOrders, AiDecisionRecords, PortfolioRiskAnalysis, VirtualOrderGroups },
   props: {
     strategies: { type: Array, default: () => [] },
     loading: { type: Boolean, default: false },

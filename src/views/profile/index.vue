@@ -8,7 +8,7 @@
       <p class="page-desc">{{ $t('profile.description') || 'Manage your account settings and preferences' }}</p>
     </div>
 
-    <div class="profile-overview-grid">
+    <div class="profile-overview-grid" :class="{ 'profile-overview-grid--personal': personalWorkspace }">
       <a-card :bordered="false" class="profile-card">
         <div class="profile-identity">
           <a-avatar :size="72" :src="profile.avatar || '/avatar2.jpg'" />
@@ -18,7 +18,7 @@
               <a-tag :color="getRoleColor(profile.role)">
                 {{ getRoleLabel(profile.role) }}
               </a-tag>
-              <a-tag v-if="isVip" color="gold">
+              <a-tag v-if="!personalWorkspace && isVip" color="gold">
                 <a-icon type="crown" />
                 VIP
               </a-tag>
@@ -44,7 +44,7 @@
         </div>
       </a-card>
 
-      <a-card :bordered="false" class="credits-card">
+      <a-card v-if="!personalWorkspace" :bordered="false" class="credits-card">
         <div class="credits-header">
           <h3 class="credits-title">
             <a-icon type="wallet" />
@@ -80,7 +80,7 @@
         </div>
       </a-card>
 
-      <a-card :bordered="false" class="referral-card">
+      <a-card v-if="!personalWorkspace" :bordered="false" class="referral-card">
         <div class="referral-header">
           <h3 class="referral-title">
             <a-icon type="team" />
@@ -321,7 +321,7 @@
             </div>
           </a-tab-pane>
 
-          <a-tab-pane key="credits">
+          <a-tab-pane v-if="!personalWorkspace" key="credits">
             <span slot="tab"><a-icon type="wallet" />{{ $t('profile.creditsLog') || '消费记录' }}</span>
             <a-table
               :columns="creditsLogColumns"
@@ -587,7 +587,7 @@
             </div>
           </a-tab-pane>
 
-          <a-tab-pane key="referrals">
+          <a-tab-pane v-if="!personalWorkspace" key="referrals">
             <span slot="tab"><a-icon type="team" />{{ $t('profile.referral.listTab') || '邀请列表' }}</span>
             <a-table
               :columns="referralColumns"
@@ -764,6 +764,7 @@ import { getSettingsValues } from '@/api/settings'
 import { baseMixin } from '@/store/app-mixin'
 import ProfileAgentTokens from '@/views/profile/components/ProfileAgentTokens.vue'
 import { formatBrowserLocalDateTime } from '@/utils/userTime'
+import { PERSONAL_WORKSPACE, workspaceProfileTab } from '@/config/workspace.mjs'
 
 const DEFAULT_NOTIFICATION_CHANNELS = ['browser', 'email']
 const normalizeNotificationChannels = channels => (
@@ -776,6 +777,7 @@ export default {
   mixins: [baseMixin],
   data () {
     return {
+      personalWorkspace: PERSONAL_WORKSPACE,
       loading: false,
       saving: false,
       changingPassword: false,
@@ -1109,7 +1111,7 @@ export default {
     // jump straight to a specific tab.
     this.applyTabFromQuery(this.$route.query.tab)
     this.loadProfile()
-    this.loadReferrals()
+    if (!this.personalWorkspace) this.loadReferrals()
   },
   beforeDestroy () {
     window.removeEventListener('resize', this.syncProfileViewport)
@@ -1124,6 +1126,7 @@ export default {
     // Whitelist of tabs we accept from ``?tab=xxx``. Anything else is a no-op
     // so a malformed link can't put the page in a weird state.
     applyTabFromQuery (rawTab) {
+      rawTab = workspaceProfileTab(rawTab)
       const allowed = ['basic', 'agentTokens', 'password', 'security', 'credits', 'notifications', 'referrals', 'loginLogs']
       if (rawTab && allowed.includes(rawTab) && this.activeTab !== rawTab) {
         this.activeTab = rawTab
@@ -2880,6 +2883,10 @@ export default {
 
 /* Compact account overview and task-oriented settings navigation. */
 .profile-page {
+  .profile-overview-grid.profile-overview-grid--personal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .profile-overview-grid {
     display: grid;
     grid-template-columns: minmax(320px, 1fr) minmax(280px, 0.82fr) minmax(360px, 1.12fr);
