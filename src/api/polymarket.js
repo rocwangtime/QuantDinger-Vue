@@ -11,3 +11,7 @@ export const submitPolymarketJob = pending => request({
   data: pending.payload,
   headers: { 'Idempotency-Key': pending.key }
 })
+export const getPolymarketEligibility = refresh => request({ url: '/api/polymarket/eligibility', method: 'get', params: refresh ? { refresh: 1 } : {} })
+export const getPolymarketObserverStatus = () => request({ url: '/api/polymarket/observer/status', method: 'get' })
+export const getPolymarketObserverSummary = days => request({ url: '/api/polymarket/observer/summary', method: 'get', params: { days } })
+export const getPolymarketObserverEpisodes = days => request({ url: '/api/polymarket/observer/episodes', method: 'get', params: { days, limit: 50 } })

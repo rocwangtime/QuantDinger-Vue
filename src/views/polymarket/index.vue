@@ -5,6 +5,19 @@
       <a-tag color="blue">{{ $t('polymarket.scope') }}</a-tag>
     </header>
     <a-alert type="info" show-icon :message="$t('polymarket.scopeHint')" />
+    <section class="lab-card observer-panel">
+      <div class="section-header"><h3>{{ $t('polymarket.eligibilityTitle') }}</h3><a-button size="small" :loading="eligibilityLoading" @click="refreshEligibility(true)">{{ $t('polymarket.manualRefresh') }}</a-button></div>
+      <a-alert :type="eligibilityType" show-icon :message="$t('polymarket.eligibility_' + (eligibility.status || 'unknown'))" :description="eligibilityDescription" />
+      <a-alert type="warning" show-icon :message="$t('polymarket.paperOnly')" />
+      <div class="section-header"><h3>{{ $t('polymarket.observerTitle') }}</h3><a-button size="small" :loading="observerLoading" @click="refreshObserver">{{ $t('polymarket.manualRefresh') }}</a-button></div>
+      <a-select v-model="observerDays" size="small" @change="refreshObserver"><a-select-option :value="1">1d</a-select-option><a-select-option :value="7">7d</a-select-option><a-select-option :value="30">30d</a-select-option></a-select>
+      <p>{{ $t('polymarket.observerMode') }}: {{ observerStatus.running ? $t('polymarket.running') : $t('polymarket.stopped') }} · {{ observerStatus.mode }} · {{ $t('polymarket.markets') }}: {{ observerStatus.markets_subscribed }} · {{ $t('polymarket.lastMessage') }}: {{ time(observerStatus.last_message_at) }}</p>
+      <p v-if="observerStatus.last_error" class="error-text">{{ observerStatus.last_error }}</p>
+      <p>{{ $t('polymarket.episodeCount') }}: {{ (observerSummary.episodes_per_day || []).reduce((sum, row) => sum + Number(row.episodes || 0), 0) }} · {{ $t('polymarket.nearMisses') }}: {{ observerSummary.near_miss_count || 0 }}</p>
+      <p>{{ $t('polymarket.duration') }}: {{ distribution(observerSummary.duration_distribution) }} · {{ $t('polymarket.maxEdge') }}: {{ distribution(observerSummary.edge_distribution) }}</p>
+      <a-table size="small" :data-source="observerSummary.per_market || []" :pagination="{ pageSize: 5 }" row-key="market_id" :columns="observerColumns" />
+      <h4>{{ $t('polymarket.recentEpisodes') }}</h4><a-table size="small" :data-source="observerEpisodes" row-key="id" :pagination="{ pageSize: 5 }" :columns="episodeColumns" />
+    </section>
     <section class="lab-card lab-onboarding">
       <h3>{{ $t('polymarket.fundsTitle') }}</h3>
       <div class="account-grid">
@@ -156,7 +169,7 @@
 </template>
 
 <script>
-import { listPolymarketJobs, getPolymarketJob, submitPolymarketJob, cancelPolymarketJob, getPolymarketEvidence } from '@/api/polymarket'
+import { listPolymarketJobs, getPolymarketJob, submitPolymarketJob, cancelPolymarketJob, getPolymarketEvidence, getPolymarketEligibility, getPolymarketObserverStatus, getPolymarketObserverSummary, getPolymarketObserverEpisodes } from '@/api/polymarket'
 import { activeJob, paperDefaults, formatNumber, pendingStorageKey, validatePending, scanRows, paperSummary, mergeJob } from '@/utils/polymarket'
 
 export default {
@@ -178,7 +191,14 @@ export default {
       revision: 0,
       timer: null,
       clock: null,
-      now: Date.now()
+      now: Date.now(),
+      eligibility: { status: 'unknown' },
+      eligibilityLoading: false,
+      observerStatus: {},
+      observerSummary: {},
+      observerEpisodes: [],
+      observerLoading: false,
+      observerDays: 1
     }
   },
   computed: {
@@ -193,17 +213,24 @@ export default {
     resultMetrics () { return ['realizedPnl', 'cashChange', 'mergedQuantity', 'residualCostBasis'] },
     quoteColumns () { return [this.column('market', 'question', 'market', 290), this.column('quantity', 'quantity', 'numeric'), this.column('acquisition', 'acquisitionCost', 'numeric'), this.column('fees', 'takerFees', 'numeric'), this.column('net', 'netProfit', 'numeric'), this.column('edge', 'netEdgeBps', 'numeric'), this.column('observed', 'observedMs', 'observed', 100), this.column('verdict', 'eligible', 'verdict', 200), this.column('actions', 'marketId', 'actions', 130)] },
     historyColumns () { return [this.column('jobId', 'job_id', null, 290), this.column('created', 'created_at', 'created', 160), this.column('status', 'status', 'status'), this.column('realizedPnl', 'result', 'profit'), this.column('actions', 'job_id', 'actions', 160)] },
+    eligibilityType () { return ({ eligible: 'success', blocked: 'error', close_only: 'warning', unknown: 'warning' })[this.eligibility.status] || 'warning' },
+    eligibilityDescription () { return [this.eligibility.country, this.eligibility.region, this.eligibility.ip].filter(Boolean).join(' · ') },
+    episodeColumns () { return [{ title: this.$t('polymarket.market'), dataIndex: 'question', key: 'question' }, { title: this.$t('polymarket.duration'), dataIndex: 'duration_ms', key: 'duration_ms' }, { title: this.$t('polymarket.maxEdge'), dataIndex: 'max_net_edge_bps', key: 'max_net_edge_bps' }, { title: this.$t('polymarket.observed'), dataIndex: 'started_at', key: 'started_at' }] },
+    observerColumns () { return [{ title: this.$t('polymarket.market'), dataIndex: 'question', key: 'question' }, { title: this.$t('polymarket.episodeCount'), dataIndex: 'episodes', key: 'episodes' }, { title: this.$t('polymarket.maxEdge'), dataIndex: 'max_edge_bps', key: 'max_edge_bps' }] },
     fillColumns () { return [this.column('role', 'role', 'label'), this.column('side', 'side', 'label'), this.column('filled', 'filled', 'numeric'), this.column('price', 'averagePrice', 'numeric'), this.column('fees', 'fee', 'numeric')] }
   },
   watch: {
     owner () { this.reset() }
   },
-  mounted () { this.reset(); this.clock = setInterval(() => { this.now = Date.now() }, 1000) },
+  mounted () { this.reset(); this.refreshEligibility(false); this.refreshObserver(); this.clock = setInterval(() => { this.now = Date.now() }, 1000) },
   beforeDestroy () { this.epoch++; clearTimeout(this.timer); clearInterval(this.clock) },
   methods: {
     activeJob,
     formatNumber,
+    async refreshEligibility (refresh) { this.eligibilityLoading = true; try { const result = await getPolymarketEligibility(refresh); this.eligibility = result.data || { status: 'unknown' } } catch (error) { this.eligibility = { status: 'unknown' } } finally { this.eligibilityLoading = false } },
+    async refreshObserver () { this.observerLoading = true; try { const [status, summary, episodes] = await Promise.all([getPolymarketObserverStatus(), getPolymarketObserverSummary(this.observerDays), getPolymarketObserverEpisodes(this.observerDays)]); this.observerStatus = status.data || {}; this.observerSummary = summary.data || {}; this.observerEpisodes = episodes.data || [] } catch (error) { this.fail(error) } finally { this.observerLoading = false } },
     column (title, dataIndex, slot, width) { return { title: this.$t('polymarket.' + title), dataIndex, key: title, width, scopedSlots: slot ? { customRender: slot } : undefined } },
+    distribution (rows) { return (rows || []).map(row => `${row.bucket}: ${row.count}`).join(' · ') || '—' },
     label (value) { const text = String(value || ''); const key = text.startsWith('polymarket.') ? text : 'polymarket.' + text; return this.$te(key) ? this.$t(key) : text },
     time (value) { if (!value) return '—'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString() },
     isStale (row) { return this.now - Number(row.observedMs) > Number(this.settings.maxBookAgeMs) },
