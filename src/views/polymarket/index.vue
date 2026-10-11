@@ -5,6 +5,7 @@
       <a-tag color="blue">{{ $t('polymarket.scope') }}</a-tag>
     </header>
     <a-alert type="info" show-icon :message="$t('polymarket.scopeHint')" />
+    <paper-account />
     <section class="lab-card observer-panel">
       <div class="section-header"><h3>{{ $t('polymarket.eligibilityTitle') }}</h3><a-button size="small" :loading="eligibilityLoading" @click="refreshEligibility(true)">{{ $t('polymarket.manualRefresh') }}</a-button></div>
       <a-alert :type="eligibilityType" show-icon :message="$t('polymarket.eligibility_' + (eligibility.status || 'unknown'))" :description="eligibilityDescription" />
@@ -189,11 +190,13 @@
 </template>
 
 <script>
+import PaperAccount from './components/PaperAccount.vue'
 import { listPolymarketJobs, getPolymarketJob, submitPolymarketJob, cancelPolymarketJob, getPolymarketEvidence, getPolymarketEligibility, getPolymarketObserverStatus, getPolymarketObserverSummary, getPolymarketObserverEpisodes } from '@/api/polymarket'
 import { activeJob, paperDefaults, formatNumber, pendingStorageKey, validatePending, scanRows, paperSummary, mergeJob } from '@/utils/polymarket'
 
 export default {
   name: 'PolymarketLab',
+  components: { PaperAccount },
   data () {
     return {
       settings: paperDefaults(),

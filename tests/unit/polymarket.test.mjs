@@ -7,6 +7,8 @@ import { activeJob, paperDefaults, formatNumber, pendingStorageKey, validatePend
 const load = bindings => {
   const source = readFileSync(new URL('../../src/views/polymarket/index.vue', import.meta.url), 'utf8')
   const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'return')
+  // Evaluate the imported SFC script with isolated API bindings.
+  // eslint-disable-next-line no-new-func
   return new Function(...Object.keys(bindings), script)(...Object.values(bindings))
 }
 function instance (component, values = {}) {
@@ -16,7 +18,7 @@ function instance (component, values = {}) {
   vm.schedulePoll = () => {}
   return vm
 }
-const helpers = { activeJob, paperDefaults, formatNumber, pendingStorageKey, validatePending, scanRows, paperSummary, mergeJob }
+const helpers = { PaperAccount: {}, activeJob, paperDefaults, formatNumber, pendingStorageKey, validatePending, scanRows, paperSummary, mergeJob }
 const api = { getPolymarketJob: () => {}, cancelPolymarketJob: () => {}, getPolymarketEvidence: () => {}, listPolymarketJobs: async () => ({ data: [] }) }
 
 test('closed P&L excludes exposed runs and replay duplicates', () => {
@@ -45,7 +47,9 @@ test('terminal responses cannot regress and evidence quotes survive polling phas
 
 test('unknown submit outcome restores the exact key and payload after reopening', async () => {
   const saved = new Map(); const attempts = []
-  const component = load({ ...helpers, ...api,
+  const component = load({
+ ...helpers,
+...api,
     submitPolymarketJob: async pending => { attempts.push(JSON.parse(JSON.stringify(pending))); throw new Error('lost response') },
     window: { crypto: webcrypto },
     sessionStorage: { getItem: key => saved.get(key), setItem: (key, value) => saved.set(key, value), removeItem: key => saved.delete(key) }
@@ -62,7 +66,9 @@ test('unknown submit outcome restores the exact key and payload after reopening'
 
 test('late history does not replace a newly submitted scan', async () => {
   let finishScans; let finishPapers
-  const component = load({ ...helpers, ...api,
+  const component = load({
+ ...helpers,
+...api,
     listPolymarketJobs: kind => new Promise(resolve => { if (kind === 'polymarket_scan') finishScans = resolve; else finishPapers = resolve })
   })
   const vm = instance(component)
@@ -77,7 +83,9 @@ test('late history does not replace a newly submitted scan', async () => {
 
 test('owner changes reject late polling data from the previous session', async () => {
   let finish
-  const component = load({ ...helpers, ...api,
+  const component = load({
+ ...helpers,
+...api,
     getPolymarketJob: () => new Promise(resolve => { finish = resolve }),
     sessionStorage: { getItem: () => null }
   })
@@ -91,7 +99,9 @@ test('owner changes reject late polling data from the previous session', async (
 
 test('saved simulation can only be retried once at a time', async () => {
   let finish; let count = 0
-  const component = load({ ...helpers, ...api,
+  const component = load({
+ ...helpers,
+...api,
     submitPolymarketJob: () => { count++; return new Promise(resolve => { finish = resolve }) },
     sessionStorage: { removeItem: () => {} }
   })

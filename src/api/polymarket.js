@@ -15,3 +15,11 @@ export const getPolymarketEligibility = refresh => request({ url: '/api/polymark
 export const getPolymarketObserverStatus = () => request({ url: '/api/polymarket/observer/status', method: 'get' })
 export const getPolymarketObserverSummary = (days, filters = {}) => request({ url: '/api/polymarket/observer/summary', method: 'get', params: { days, ...filters } })
 export const getPolymarketObserverEpisodes = (days, filters = {}) => request({ url: '/api/polymarket/observer/episodes', method: 'get', params: { days, limit: 50, ...filters } })
+
+const accountPath = '/api/polymarket/paper-account'
+export const getPaperAccountStatus = () => request({ url: `${accountPath}/status`, method: 'get' })
+export const getPaperAccountTrades = params => request({ url: `${accountPath}/trades`, method: 'get', params })
+export const getPaperAccountTrade = id => request({ url: `${accountPath}/trades/${encodeURIComponent(id)}`, method: 'get' })
+export const replayPaperAccountTrade = id => request({ url: `${accountPath}/trades/${encodeURIComponent(id)}/replay`, method: 'post' })
+export const getPaperAccountReport = params => request({ url: `${accountPath}/daily-report`, method: 'get', params })
+export const exportPaperAccountReport = params => request({ url: `${accountPath}/export`, method: 'get', params, responseType: 'blob' })
