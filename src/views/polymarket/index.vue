@@ -11,11 +11,31 @@
       <a-alert type="warning" show-icon :message="$t('polymarket.paperOnly')" />
       <div class="section-header"><h3>{{ $t('polymarket.observerTitle') }}</h3><a-button size="small" :loading="observerLoading" @click="refreshObserver">{{ $t('polymarket.manualRefresh') }}</a-button></div>
       <a-select v-model="observerDays" size="small" @change="refreshObserver"><a-select-option :value="1">1d</a-select-option><a-select-option :value="7">7d</a-select-option><a-select-option :value="30">30d</a-select-option></a-select>
+      <div class="toolbar observer-filters">
+        <label v-for="filter in observerFilterOptions" :key="filter.key">
+          {{ $t('polymarket.' + filter.key) }}
+          <a-select v-model="observerFilters[filter.key]" size="small" style="min-width: 110px" @change="refreshObserver">
+            <a-select-option value="">{{ $t('polymarket.all') }}</a-select-option>
+            <a-select-option v-for="value in filter.values" :key="value" :value="value">{{ label(value) }}</a-select-option>
+          </a-select>
+        </label>
+      </div>
+      <p class="hint">{{ $t('polymarket.referenceHint') }}</p>
       <p>{{ $t('polymarket.observerMode') }}: {{ observerStatus.running ? $t('polymarket.running') : $t('polymarket.stopped') }} · {{ observerStatus.mode }} · {{ $t('polymarket.markets') }}: {{ observerStatus.markets_subscribed }} · {{ $t('polymarket.lastMessage') }}: {{ time(observerStatus.last_message_at) }}</p>
       <p v-if="observerStatus.last_error" class="error-text">{{ observerStatus.last_error }}</p>
       <p>{{ $t('polymarket.episodeCount') }}: {{ (observerSummary.episodes_per_day || []).reduce((sum, row) => sum + Number(row.episodes || 0), 0) }} · {{ $t('polymarket.nearMisses') }}: {{ observerSummary.near_miss_count || 0 }}</p>
       <p>{{ $t('polymarket.duration') }}: {{ distribution(observerSummary.duration_distribution) }} · {{ $t('polymarket.maxEdge') }}: {{ distribution(observerSummary.edge_distribution) }}</p>
       <a-table size="small" :data-source="observerSummary.per_market || []" :pagination="{ pageSize: 5 }" row-key="market_id" :columns="observerColumns" />
+      <h4>{{ $t('polymarket.expiryGroups') }}</h4>
+      <a-table
+        size="small"
+        :data-source="observerSummary.groups || []"
+        :pagination="{ pageSize: 6 }"
+        :row-key="groupKey"
+        :columns="groupColumns"
+        :scroll="{ x: 750 }" />
+      <h4>{{ $t('polymarket.subscriptions') }}</h4>
+      <a-table size="small" :data-source="observerStatus.updown_subscriptions || []" :pagination="{ pageSize: 5 }" row-key="id" :columns="subscriptionColumns" />
       <h4>{{ $t('polymarket.recentEpisodes') }}</h4><a-table size="small" :data-source="observerEpisodes" row-key="id" :pagination="{ pageSize: 5 }" :columns="episodeColumns" />
     </section>
     <section class="lab-card lab-onboarding">
@@ -198,7 +218,8 @@ export default {
       observerSummary: {},
       observerEpisodes: [],
       observerLoading: false,
-      observerDays: 1
+      observerDays: 1,
+      observerFilters: { market_type: '', asset: '', interval: '', expiry_bucket: '' }
     }
   },
   computed: {
@@ -217,6 +238,9 @@ export default {
     eligibilityDescription () { return [this.eligibility.country, this.eligibility.region, this.eligibility.ip].filter(Boolean).join(' · ') },
     episodeColumns () { return [{ title: this.$t('polymarket.market'), dataIndex: 'question', key: 'question' }, { title: this.$t('polymarket.duration'), dataIndex: 'duration_ms', key: 'duration_ms' }, { title: this.$t('polymarket.maxEdge'), dataIndex: 'max_net_edge_bps', key: 'max_net_edge_bps' }, { title: this.$t('polymarket.observed'), dataIndex: 'started_at', key: 'started_at' }] },
     observerColumns () { return [{ title: this.$t('polymarket.market'), dataIndex: 'question', key: 'question' }, { title: this.$t('polymarket.episodeCount'), dataIndex: 'episodes', key: 'episodes' }, { title: this.$t('polymarket.maxEdge'), dataIndex: 'max_edge_bps', key: 'max_edge_bps' }] },
+    observerFilterOptions () { return [{ key: 'market_type', values: ['yes_no', 'up_down'] }, { key: 'asset', values: ['BTC', 'ETH', 'SOL', 'XRP'] }, { key: 'interval', values: ['5m', '15m', '1h', '4h', '1d'] }, { key: 'expiry_bucket', values: ['>10m', '5-10m', '2-5m', '1-2m', '30-60s', '<30s'] }] },
+    groupColumns () { return ['market_type', 'asset', 'interval', 'expiry_bucket', 'episodeCount', 'nearMisses', 'maxEdge'].map((key, index) => this.column(key, ['market_type', 'asset', 'interval', 'expiry_bucket', 'episodes', 'near_misses', 'max_edge_bps'][index])) },
+    subscriptionColumns () { return [this.column('asset', 'asset'), this.column('interval', 'interval'), this.column('endTime', 'endDate')] },
     fillColumns () { return [this.column('role', 'role', 'label'), this.column('side', 'side', 'label'), this.column('filled', 'filled', 'numeric'), this.column('price', 'averagePrice', 'numeric'), this.column('fees', 'fee', 'numeric')] }
   },
   watch: {
@@ -225,10 +249,12 @@ export default {
   mounted () { this.reset(); this.refreshEligibility(false); this.refreshObserver(); this.clock = setInterval(() => { this.now = Date.now() }, 1000) },
   beforeDestroy () { this.epoch++; clearTimeout(this.timer); clearInterval(this.clock) },
   methods: {
+    observerQuery () { return Object.fromEntries(Object.entries(this.observerFilters).filter(([, value]) => value)) },
+    groupKey (row) { return [row.market_type, row.asset, row.interval, row.expiry_bucket].join('|') },
     activeJob,
     formatNumber,
     async refreshEligibility (refresh) { this.eligibilityLoading = true; try { const result = await getPolymarketEligibility(refresh); this.eligibility = result.data || { status: 'unknown' } } catch (error) { this.eligibility = { status: 'unknown' } } finally { this.eligibilityLoading = false } },
-    async refreshObserver () { this.observerLoading = true; try { const [status, summary, episodes] = await Promise.all([getPolymarketObserverStatus(), getPolymarketObserverSummary(this.observerDays), getPolymarketObserverEpisodes(this.observerDays)]); this.observerStatus = status.data || {}; this.observerSummary = summary.data || {}; this.observerEpisodes = episodes.data || [] } catch (error) { this.fail(error) } finally { this.observerLoading = false } },
+    async refreshObserver () { this.observerLoading = true; try { const [status, summary, episodes] = await Promise.all([getPolymarketObserverStatus(), getPolymarketObserverSummary(this.observerDays, this.observerQuery()), getPolymarketObserverEpisodes(this.observerDays, this.observerQuery())]); this.observerStatus = status.data || {}; this.observerSummary = summary.data || {}; this.observerEpisodes = episodes.data || [] } catch (error) { this.fail(error) } finally { this.observerLoading = false } },
     column (title, dataIndex, slot, width) { return { title: this.$t('polymarket.' + title), dataIndex, key: title, width, scopedSlots: slot ? { customRender: slot } : undefined } },
     distribution (rows) { return (rows || []).map(row => `${row.bucket}: ${row.count}`).join(' · ') || '—' },
     label (value) { const text = String(value || ''); const key = text.startsWith('polymarket.') ? text : 'polymarket.' + text; return this.$te(key) ? this.$t(key) : text },

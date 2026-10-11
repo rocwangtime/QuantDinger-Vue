@@ -1,4 +1,5 @@
 const en = {
+  market_type: 'Market type', asset: 'Asset', interval: 'Interval', expiry_bucket: 'Time to expiry', all: 'All', yes_no: 'YES / NO', up_down: 'Up / Down', expiryGroups: 'Statistics by time to expiry', subscriptions: 'Current Up/Down subscriptions', endTime: 'End time', referenceHint: 'Underlying spot prices are research context only. Availability and resolution sources vary by market.',
   recentEpisodes: 'Recent opportunity episodes', duration: 'Duration (ms)', stopped: 'Stopped', eligibilityTitle: 'Trading location eligibility', eligibility_eligible: 'Eligible by this probe', eligibility_blocked: 'Blocked', eligibility_close_only: 'Close-only jurisdiction', eligibility_unknown: 'Eligibility unknown; paper-only', manualRefresh: 'Refresh', observerTitle: 'Continuous paper observer', observerMode: 'Observer mode', markets: 'Markets', lastMessage: 'Last message', episodeCount: 'Episodes', nearMisses: 'Near misses', maxEdge: 'Max edge (bps)',
   fundsTitle: 'Wallet and experiment funds', executionMode: 'Execution mode', paperOnly: 'Paper trading · live orders unavailable',
   paperModeHint: 'Public, live order books inform simulated fills. No real tokens are bought or sold.',
@@ -53,6 +54,7 @@ const en = {
   costHint: 'Net estimates deduct the configured merge cost and profit reserve. Simulated realized P&L deducts modeled fees and merge cost. Costs are assumptions; no rebates are credited.'
 }
 const zh = {
+  market_type: '市场类型', asset: '标的', interval: '周期', expiry_bucket: '距到期时间', all: '全部', yes_no: 'YES / NO', up_down: '上涨 / 下跌', expiryGroups: '按距到期时间分组统计', subscriptions: '当前涨跌市场订阅', endTime: '到期时间', referenceHint: '现货参考价格仅用于研究；价格可用性和结算数据源因市场而异。',
   recentEpisodes: '近期机会段', duration: '持续时间（毫秒）', stopped: '已停止', eligibilityTitle: '交易地区资格探测', eligibility_eligible: '探测结果：可用', eligibility_blocked: '所在地区受限', eligibility_close_only: '所在地区仅允许平仓', eligibility_unknown: '资格未知；仅纸面观察', manualRefresh: '手动刷新', observerTitle: '持续纸面观察器', observerMode: '观察模式', markets: '市场数', lastMessage: '最近消息', episodeCount: '机会段数', nearMisses: '接近机会次数', maxEdge: '最大边际（基点）',
   fundsTitle: '钱包与实验资金', executionMode: '执行模式', paperOnly: '模拟交易 · 实盘下单未开放',
   paperModeHint: '读取真实公开盘口，推算模拟成交；不会实际买卖代币。',
