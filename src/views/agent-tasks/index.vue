@@ -19,6 +19,7 @@
         </button>
       </aside>
       <main v-if="dashboard" class="task-main">
+        <symbol-settings v-if="dashboard.task.config.market === 'HKStock' && dashboard.task.config.kind === 'price_trigger'" :key="selectedId" :task-id="selectedId" @saved="select(selectedId)" />
         <section class="task-panel">
           <div class="task-heading">
             <div><h2>{{ dashboard.task.name }}</h2><p>{{ dashboard.task.monitor_status }}</p></div>
@@ -258,6 +259,7 @@
 </template>
 
 <script>
+import SymbolSettings from './SymbolSettings.vue'
 import * as echarts from 'echarts'
 import { listTasks, getDashboard, getRun, saveTask, setTaskActive, previewTask, cancelRun, resetTaskRisk, getModels, getReadiness, checkConnection, getReview } from '@/api/automations'
 import { listExchangeCredentials } from '@/api/credentials'
@@ -288,6 +290,7 @@ const defaults = () => ({
 })
 
 export default {
+  components: { SymbolSettings },
   name: 'AgentTasks',
   data () {
     return {
