@@ -19,3 +19,7 @@ export const getModels = () => request({ url: '/api/ai/agent/models' }).then(dat
 export const getReadiness = id => request({ url: `${base}/${id}/readiness` }).then(dataOf)
 export const checkConnection = id => request({ url: `${base}/${id}/check-connection`, method: 'post', timeout: 60000 }).then(dataOf)
 export const getReview = (id, days) => request({ url: `${base}/${id}/review`, params: { days } }).then(dataOf)
+
+export const getSymbolConfig = id => request({ url: `${base}/${id}/symbol-config` }).then(dataOf)
+export const putSymbolConfig = (id, data) => request({ url: `${base}/${id}/symbol-config`, method: 'put', data }).then(dataOf)
+export const getSymbolAudit = (id, before) => request({ url: `${base}/${id}/symbol-config/audit`, params: { before } }).then(dataOf)
