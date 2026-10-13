@@ -19,7 +19,7 @@
         </button>
       </aside>
       <main v-if="dashboard" class="task-main">
-        <symbol-settings v-if="dashboard.task.config.market === 'HKStock' && dashboard.task.config.kind === 'price_trigger'" :key="selectedId" :task-id="selectedId" @saved="select(selectedId)" />
+        <symbol-settings v-if="['HKStock', 'USStock'].includes(dashboard.task.config.market) && dashboard.task.config.kind === 'price_trigger' && dashboard.task.config.symbols.length === 1" :key="selectedId" :task-id="selectedId" @saved="select(selectedId)" />
         <section class="task-panel">
           <div class="task-heading">
             <div><h2>{{ dashboard.task.name }}</h2><p>{{ dashboard.task.monitor_status }}</p></div>
