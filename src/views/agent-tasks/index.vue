@@ -333,7 +333,7 @@ export default {
   },
   computed: {
     decisionQuota () { return this.dashboard && this.dashboard.task.decision_budget || {} },
-    isDarkTheme () { return this.$store.getters.theme === 'dark' },
+    isDarkTheme () { return ['dark', 'realdark'].includes(this.$store.getters.theme) },
     currency () { return this.dashboard && this.dashboard.task.config.market === 'HKStock' ? 'HKD' : 'USD' },
     current () { return this.dashboard && this.dashboard.performance.latest || {} },
     report () { return this.dashboard && this.dashboard.performance.latest_valid || {} },

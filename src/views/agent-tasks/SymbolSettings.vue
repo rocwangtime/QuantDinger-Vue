@@ -1,5 +1,5 @@
 <template>
-  <section class="task-panel">
+  <section class="task-panel symbol-settings">
     <h3>{{ market }} SIMULATE · Symbol parameters / 标的参数</h3>
     <a-button :loading="loading" @click="load">Refresh / 刷新</a-button>
     <a-alert v-if="error" type="error" :message="error" show-icon />
@@ -79,3 +79,31 @@ export default {
   }
 }
 </script>
+<style scoped lang="less">
+.symbol-settings {
+  h3, h4 { color: inherit; }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 18px;
+  }
+
+  ::v-deep .ant-form-item { min-width: 0; margin-bottom: 16px; }
+  ::v-deep .ant-form-item-label { white-space: normal; line-height: 1.5; }
+  ::v-deep .ant-input-number, ::v-deep .ant-select { width: 100%; }
+
+  pre {
+    max-height: 420px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--selected);
+    padding: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .symbol-settings .form-grid { grid-template-columns: 1fr; }
+}
+</style>
