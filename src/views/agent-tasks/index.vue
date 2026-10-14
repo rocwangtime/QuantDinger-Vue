@@ -236,6 +236,7 @@
           <template slot="percent" slot-scope="value">{{ percent(value) }}</template>
           <template slot="date" slot-scope="value">{{ date(value, reviewReport.window.timezone) }}</template>
         </a-table>
+        <ForwardScoring :days="reviewReport.daily_forward_reports || []" :zh="$i18n.locale.startsWith('zh')" />
         <p class="task-footnote">{{ t('observedChangeHint') }}</p>
         <p class="task-footnote">{{ t('reportUsageHint') }}</p>
         <a-button type="primary" @click="downloadReview">{{ t('downloadReview') }}</a-button>
@@ -260,6 +261,7 @@
 </template>
 
 <script>
+import ForwardScoring from './ForwardScoring.vue'
 import SymbolSettings from './SymbolSettings.vue'
 import UsScreener from '@/components/UsScreener/index.vue'
 import * as echarts from 'echarts'
@@ -292,7 +294,7 @@ const defaults = () => ({
 })
 
 export default {
-  components: { SymbolSettings, UsScreener },
+  components: { SymbolSettings, UsScreener, ForwardScoring },
   name: 'AgentTasks',
   data () {
     return {
