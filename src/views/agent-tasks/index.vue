@@ -9,6 +9,7 @@
       </div>
     </header>
     <a-alert v-if="error" type="error" show-icon :message="error" class="task-notice" />
+    <us-screener />
     <div class="task-workspace">
       <aside class="task-rail">
         <a-empty v-if="!tasks.length && !loading" :description="t('empty')" />
@@ -260,6 +261,7 @@
 
 <script>
 import SymbolSettings from './SymbolSettings.vue'
+import UsScreener from '@/components/UsScreener/index.vue'
 import * as echarts from 'echarts'
 import { listTasks, getDashboard, getRun, saveTask, setTaskActive, previewTask, cancelRun, resetTaskRisk, getModels, getReadiness, checkConnection, getReview } from '@/api/automations'
 import { listExchangeCredentials } from '@/api/credentials'
@@ -290,7 +292,7 @@ const defaults = () => ({
 })
 
 export default {
-  components: { SymbolSettings },
+  components: { SymbolSettings, UsScreener },
   name: 'AgentTasks',
   data () {
     return {
