@@ -1,4 +1,6 @@
 const en = {
+  accountUnverified: "Unverified",
+  account_taker_verification_status: "Taker verification",
   accountTitle: "Paper arbitrage account",
   accountSimulated: "Simulated · public data",
   accountHint: "Shared virtual capital; delayed, independent leg fills. Residual exposure is marked at zero until a verified public resolution.",
@@ -91,6 +93,8 @@ const en = {
   costHint: 'Net estimates deduct the configured merge cost and profit reserve. Simulated realized P&L deducts modeled fees and merge cost. Costs are assumptions; no rebates are credited.'
 }
 const zh = {
+  accountUnverified: "待验证",
+  account_taker_verification_status: "Taker 验证状态",
   accountTitle: "纸面套利账户",
   accountSimulated: "模拟 · 公开数据",
   accountHint: "共用虚拟资金；逐腿延迟模拟成交。残余仓位保守标记为零，直至公开结果确认。",

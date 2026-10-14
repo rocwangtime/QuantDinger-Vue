@@ -11,6 +11,7 @@
     <a-alert v-if="!status.enabled" type="info" show-icon :message="$t('polymarket.accountDisabled')" />
     <a-alert v-if="status.loss_stop" type="warning" show-icon :message="$t('polymarket.accountLossStop')" />
     <a-alert v-if="error" type="error" :message="error" />
+    <a-tag v-if="status.taker_verification_status === 'unverified'" color="orange">Taker · {{ $t('polymarket.accountUnverified') }}</a-tag>
     <div class="account-metrics">
       <div v-for="key in metrics" :key="key"><span>{{ $t('polymarket.account_' + key) }}</span><b>{{ number(status[key]) }}</b></div>
     </div>
@@ -26,6 +27,7 @@
       :columns="reportColumns"
       :pagination="{ pageSize: 7 }"
       :scroll="{ x: 1200 }">
+      <template slot="verification" slot-scope="value"><a-tag v-if="value === 'unverified'" color="orange">{{ $t('polymarket.accountUnverified') }}</a-tag></template>
       <template slot="pnl" slot-scope="value"><span :class="{ loss: Number(value) < 0 }">{{ number(value) }}</span></template>
       <template slot="percent" slot-scope="value">{{ number(Number(value) * 100) }}%</template>
       <template slot="groups" slot-scope="value"><span v-for="(group, kind) in value" :key="kind">{{ $t('polymarket.' + kind) }}: {{ group.filled }}/{{ group.attempted }} · {{ number(group.net_pnl) }} </span></template>
@@ -76,7 +78,7 @@ export default {
     statuses () { return ['pending', 'not_filled', 'filled_merged', 'single_leg_unwound', 'single_leg_residual', 'cancelled_by_limit'] },
     pagination () { return { current: this.page, pageSize: 20, total: this.total } },
     reportColumns () {
-      return ['day', 'attempted', 'filled', 'fill_rate', 'single_leg_failures', 'unwinds', 'net_pnl', 'fees', 'max_drawdown', 'capital_utilization_avg', 'capital_utilization_max', 'opportunities', 'by_market_type'].map(key => ({ title: this.$t('polymarket.account_' + key), dataIndex: key, key, scopedSlots: { customRender: key === 'net_pnl' ? 'pnl' : ['fill_rate', 'capital_utilization_avg', 'capital_utilization_max'].includes(key) ? 'percent' : key === 'by_market_type' ? 'groups' : undefined } }))
+      return ['day', 'taker_verification_status', 'attempted', 'filled', 'fill_rate', 'single_leg_failures', 'unwinds', 'net_pnl', 'fees', 'max_drawdown', 'capital_utilization_avg', 'capital_utilization_max', 'opportunities', 'by_market_type'].map(key => ({ title: this.$t('polymarket.account_' + key), dataIndex: key, key, scopedSlots: { customRender: key === 'taker_verification_status' ? 'verification' : key === 'net_pnl' ? 'pnl' : ['fill_rate', 'capital_utilization_avg', 'capital_utilization_max'].includes(key) ? 'percent' : key === 'by_market_type' ? 'groups' : undefined } }))
     },
     tradeColumns () {
       return [{ title: this.$t('polymarket.market'), dataIndex: 'market_id' }, { title: this.$t('polymarket.market_type'), dataIndex: 'market_type' }, { title: this.$t('polymarket.observed'), dataIndex: 'signal_at' }, { title: this.$t('polymarket.status'), dataIndex: 'status', scopedSlots: { customRender: 'status' } }, { title: this.$t('polymarket.actions'), key: 'actions', scopedSlots: { customRender: 'actions' } }]

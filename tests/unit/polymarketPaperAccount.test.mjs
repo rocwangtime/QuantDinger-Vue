@@ -49,3 +49,15 @@ test('failed account refresh keeps existing balances and makes failure visible',
   await vm.refresh()
   assert.equal(vm.status.equity, '4999'); assert.equal(vm.error, 'polymarket.apiError'); assert.equal(vm.loading, false)
 })
+
+test('unverified annotation has conditional metric and report tags with localized labels', () => {
+  const source = readFileSync(new URL('../../src/views/polymarket/components/PaperAccount.vue', import.meta.url), 'utf8')
+  assert.match(source, /v-if="status\.taker_verification_status === 'unverified'"/)
+  assert.match(source, /slot="verification"[^>]*><a-tag v-if="value === 'unverified'"/)
+  const component = load({ formatNumber })
+  const columns = component.computed.reportColumns.call({ $t: key => key })
+  assert.equal(columns.find(c => c.dataIndex === 'taker_verification_status').scopedSlots.customRender, 'verification')
+  const locales = readFileSync(new URL('../../src/locales/lang/polymarket.js', import.meta.url), 'utf8')
+  assert.match(locales, /accountUnverified: "Unverified"/)
+  assert.match(locales, /accountUnverified: "待验证"/)
+})
