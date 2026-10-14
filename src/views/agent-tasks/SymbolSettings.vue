@@ -1,14 +1,14 @@
 <template>
   <section class="task-panel">
-    <h3>HK SIMULATE · Symbol parameters / 标的参数</h3>
+    <h3>{{ market }} SIMULATE · Symbol parameters / 标的参数</h3>
     <a-button :loading="loading" @click="load">Refresh / 刷新</a-button>
     <a-alert v-if="error" type="error" :message="error" show-icon />
     <template v-if="settings">
       <p>{{ settings.symbol }} · revision {{ settings.revision }} · {{ settings.applied ? 'Effective / 已应用' : 'Defaults pending save / 保存后应用默认值' }}</p>
-      <p>HKD amounts; percentages use 2 = 2%. Pause before saving. PAPER_AUTO requires separate authorization. Drawdown requires manual risk reset. Enter a reference price to validate one lot cost. Execution uses fresh broker price and lot size before each order.</p>
+      <p>{{ currency }} amounts; percentages use 2 = 2%. Pause before saving. PAPER_AUTO requires separate authorization. Drawdown requires manual risk reset. Enter a reference price to validate one lot cost. Execution uses fresh broker price and lot size before each order.</p>
       <a-form layout="vertical" @submit.prevent="save">
         <div class="form-grid">
-          <a-form-item v-for="(value, key) in params" :key="key" :label="labels[key] || key">
+          <a-form-item v-for="(value, key) in visibleParams" :key="key" :label="(labels[key] || key).replace(/HKD/g, currency)">
             <a-switch v-if="typeof value === 'boolean'" v-model="params[key]" :disabled="settings.active" />
             <a-select v-else-if="key === 'mode'" v-model="params[key]" :disabled="settings.active">
               <a-select-option value="plan_only">plan_only</a-select-option><a-select-option value="paper_auto">paper_auto</a-select-option>
@@ -27,6 +27,7 @@
   </section>
 </template>
 <script>
+import { marketCurrency, visibleSymbolParams } from './symbolSettings.mjs'
 import { lotValidationError } from './lotValidation.mjs'
 import { getSymbolConfig, putSymbolConfig, getSymbolAudit } from '@/api/automations'
 export default {
@@ -37,9 +38,14 @@ export default {
     audit: [],
     error: '',
     loading: false,
-    labels: { budget: 'Task budget / 任务本金 HKD', per_order_cap: 'Per order / 单笔 HKD', daily_buy_cap: 'Daily buy cap / 每日买入 HKD', cash_reserve_pct: 'Cash reserve / 储备 %', max_position: 'Max position / 持仓上限 HKD', prev_close_pct: '± Previous close / 昨收 %', short_move_pct: '± Short move / 短窗 %', window_minutes: 'Window / 窗口 分钟', cooldown_minutes: 'Same direction cooldown / 同向冷却 分钟', max_triggers_day: 'Max triggers/day / 每日触发上限', blackout_auction: 'Opening auction blackout / 开盘竞价禁入', blackout_lunch: 'Lunch blackout / 午休禁入', blackout_close_minutes: 'Before close blackout / 收盘前 分钟', stop_loss_pct: 'Stop loss / 止损 %', daily_loss_pct: 'Daily budget loss / 每日本金亏损 %', max_drawdown_pct: 'Drawdown / 回撤 %', reference_price: 'Reference price / 参考价格 HKD', lot_size: 'Lot size / 每手股数' },
+    labels: { blackout_open_minutes: 'After open blackout / 开盘后 分钟', extended_hours: 'Extended hours / 盘前盘后', budget: 'Task budget / 任务本金 HKD', per_order_cap: 'Per order / 单笔 HKD', daily_buy_cap: 'Daily buy cap / 每日买入 HKD', cash_reserve_pct: 'Cash reserve / 储备 %', max_position: 'Max position / 持仓上限 HKD', prev_close_pct: '± Previous close / 昨收 %', short_move_pct: '± Short move / 短窗 %', window_minutes: 'Window / 窗口 分钟', cooldown_minutes: 'Same direction cooldown / 同向冷却 分钟', max_triggers_day: 'Max triggers/day / 每日触发上限', blackout_auction: 'Opening auction blackout / 开盘竞价禁入', blackout_lunch: 'Lunch blackout / 午休禁入', blackout_close_minutes: 'Before close blackout / 收盘前 分钟', stop_loss_pct: 'Stop loss / 止损 %', daily_loss_pct: 'Daily budget loss / 每日本金亏损 %', max_drawdown_pct: 'Drawdown / 回撤 %', reference_price: 'Reference price / 参考价格 HKD', lot_size: 'Lot size / 每手股数' },
     columns: [{ title: 'Who / 用户', dataIndex: 'user_id' }, { title: 'When / 时间', dataIndex: 'changed_at' }, { title: 'Field / 字段', dataIndex: 'field' }, { title: 'Old / 原值', dataIndex: 'old_value', customRender: v => JSON.stringify(v) }, { title: 'New / 新值', dataIndex: 'new_value', customRender: v => JSON.stringify(v) }]
   }),
+  computed: {
+    market () { return this.settings?.effective_config.market || 'HKStock' },
+    currency () { return marketCurrency(this.market) },
+    visibleParams () { return visibleSymbolParams(this.params, this.market) }
+  },
   watch: { taskId: { immediate: true, handler: 'load' } },
   methods: {
     async load () {
@@ -50,16 +56,16 @@ export default {
         const [settings, audit] = await Promise.all([getSymbolConfig(id), getSymbolAudit(id)])
         if (id !== this.taskId) return
         this.settings = settings
-        this.params = { reference_price: null, ...settings.params }
+        this.params = { reference_price: null, blackout_open_minutes: 0, ...settings.params }
         this.audit = audit
       } catch (e) { this.error = e.message } finally { this.loading = false }
     },
     async save () {
       this.error = ''
       const p = this.params
-      this.error = lotValidationError(p)
+      this.error = lotValidationError(p, this.currency)
       if (this.error) return
-      const integerKeys = ['window_minutes', 'cooldown_minutes', 'max_triggers_day', 'blackout_close_minutes', 'lot_size']
+      const integerKeys = ['window_minutes', 'cooldown_minutes', 'max_triggers_day', 'blackout_close_minutes', 'lot_size', 'blackout_open_minutes']
       if (Object.values(p).some(v => typeof v === 'number' && (!Number.isFinite(v) || v < 0)) || integerKeys.some(k => !Number.isInteger(p[k])) || p.lot_size < 1 || p.per_order_cap > p.daily_buy_cap || p.daily_buy_cap > p.budget || p.max_position > p.budget * (1 - p.cash_reserve_pct / 100)) {
         this.error = 'Invalid limits, budget, reserve or integer values / 参数不合法'
         return
